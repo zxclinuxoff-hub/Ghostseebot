@@ -88,8 +88,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 for _n in ("httpx", "httpcore"):  # без спама в логах Render
     logging.getLogger(_n).setLevel(logging.WARNING)
 
-from bot.services.premium_emoji import make_session
-bot = Bot(cfg.bot_token, session=make_session(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+from bot.services.premium_emoji import prepare_method
+
+
+class _PremiumBot(Bot):
+    """Все методы бота проходят через __call__ — там подменяются обычные эмодзи на премиум."""
+    async def __call__(self, method, request_timeout=None):
+        return await super().__call__(prepare_method(method), request_timeout)
+
+
+bot = _PremiumBot(cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 # порядок важен: админка первой (фильтр по ID), дальше остальное
 dp.message.outer_middleware(GateMiddleware())
