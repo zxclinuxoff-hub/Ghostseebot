@@ -218,15 +218,34 @@ def name_of(u) -> str:
     return esc(n + (f" (@{u.username})" if getattr(u, "username", None) else ""))
 
 
-async def send_media(bot: Bot, chat_id: int, media: dict, silent: bool = False):
+# Типы, у которых Telegram не даёт подпись (подписи у кружков и стикеров нет)
+CAPTIONLESS = {"video_note", "sticker"}
+# Подписи для уведомлений: «одноразовое» (сии — удаляется) и обычное (попозже — остаётся)
+LABEL_ONCE = {"photo": "одноразовое фото", "video": "одноразовое видео", "video_note": "одноразовый кружок",
+              "voice": "одноразовое голосовое", "audio": "одноразовое аудио", "animation": "одноразовая гифка",
+              "document": "одноразовый файл", "sticker": "одноразовый стикер"}
+LABEL_KEEP = {"photo": "фото", "video": "видео", "video_note": "кружок", "voice": "голосовое",
+              "audio": "аудио", "animation": "гифку", "document": "файл", "sticker": "стикер"}
+
+
+async def send_media(bot: Bot, chat_id: int, media: dict, silent: bool = False, caption: str | None = None):
+    """Отправляет медиа. Если передана подпись — она уходит вместе с медиа одним сообщением
+    (кроме кружков и стикеров: для них подпись идёт отдельным сообщением прямо перед медиа)."""
+    kw = {}
+    if caption:
+        if media["type"] in CAPTIONLESS:
+            await bot.send_message(chat_id, caption, disable_notification=silent)
+        else:
+            kw["caption"] = caption
     meth = getattr(bot, SEND[media["type"]])
     try:
-        return await meth(chat_id, media["file_id"], disable_notification=silent)
+        return await meth(chat_id, media["file_id"], disable_notification=silent, **kw)
     except Exception:
         f = await bot.get_file(media["file_id"])
         buf = io.BytesIO()
         await bot.download_file(f.file_path, buf)
-        return await meth(chat_id, BufferedInputFile(buf.getvalue(), filename=f.file_path.split("/")[-1]), disable_notification=silent)
+        return await meth(chat_id, BufferedInputFile(buf.getvalue(), filename=f.file_path.split("/")[-1]),
+                          disable_notification=silent, **kw)
 
 
 async def owner_user(conn: dict):
@@ -258,7 +277,7 @@ async def on_connection(c: BusinessConnection, bot: Bot):
         await audit("info", "connect", c.user.id)
         st = f"✅ Подписка до {U.fmt_dt(u['sub_until'])}" if U.is_active(u) else EXPIRED
         await bot.send_message(c.user_chat_id, f"✅ <b>Бот подключён к аккаунту.</b>\n{st}\n\n"
-                                               "Команды: <code>.help</code> · исчезающее фото: ответь «сии», «попозже» или «не грузит».")
+                                               "Команды: <code>.help</code> · исчезающее фото: ответь на фото любым сообщением (ответ «сии» — одноразовое, удалится).")
     else:
         await audit("info", "disconnect", c.user.id)
 
@@ -286,12 +305,11 @@ async def on_message(m: Message, bot: Bot):
 
     if owner:
         # ---- достать исчезающее медиа: «сии» (удаляется) / «попозже», «не грузит» (остаются) ----
+        # Любой ответ (не команда) на сообщение с медиа сохраняет медиа.
+        # «сии» — одноразовое: твой ответ удаляется. Любой другой текст — медиа остаётся, ответ остаётся.
         kind = None
-        if m.reply_to_message:
-            if SII_RE.fullmatch(text):
-                kind = "sii"
-            elif LATER_RE.fullmatch(text) and media_of(m.reply_to_message):  # без медиа это обычная фраза — не трогаем
-                kind = "later"
+        if m.reply_to_message and media_of(m.reply_to_message) and not text.startswith((".", "/")):
+            kind = "sii" if SII_RE.fullmatch(text) else "later"
         if kind:
             if not active:
                 return await upsell(bot, u, conn, EXPIRED, member)
@@ -299,9 +317,10 @@ async def on_message(m: Message, bot: Bot):
             if not media:
                 return await bot.send_message(conn["user_chat_id"], "⚠️ В сообщении, на которое ты ответил, нет медиа (или Telegram его не отдал боту).")
             silent = U.setting(u, "silent", False)
-            await bot.send_message(conn["user_chat_id"], f"👁 <b>Временное медиа</b> от {name_of(m.reply_to_message.from_user)}", disable_notification=silent)
+            label = (LABEL_ONCE if kind == "sii" else LABEL_KEEP)[media["type"]]
+            caption = f"🔄 сохранено {label} от <b>{name_of(m.reply_to_message.from_user)}</b>"
             try:
-                await send_media(bot, conn["user_chat_id"], media, silent)
+                await send_media(bot, conn["user_chat_id"], media, silent, caption=caption)
                 await audit("info", "timer_reveal", conn["owner_id"], type=media["type"], via=kind)
             except Exception as e:
                 await audit("error", "timer_fail", conn["owner_id"], err=str(e)[:200])
