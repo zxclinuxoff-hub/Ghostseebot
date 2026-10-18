@@ -9,6 +9,7 @@ import httpx
 from ..config import cfg
 from ..db import NetworkError, db
 from . import users as U
+from .premium_emoji import transform_params
 
 _http = httpx.AsyncClient(
     timeout=httpx.Timeout(20.0, connect=5.0),
@@ -26,7 +27,7 @@ class TgNetError(TgError, NetworkError):
 
 
 async def api(method: str, **params):
-    params = {k: v for k, v in params.items() if v is not None}
+    params = transform_params({k: v for k, v in params.items() if v is not None})
     url = f"https://api.telegram.org/bot{cfg.bot_token}/{method}"
     last = None
     for attempt in range(3):
