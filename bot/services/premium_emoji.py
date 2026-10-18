@@ -100,33 +100,25 @@ def transform_params(params: dict) -> dict:
     return out
 
 
-# ---- aiogram: сессия, которая подменяет эмодзи во всех методах бота ----
-def make_session():
-    """Возвращает AiohttpSession, который применяет замену ко всем исходящим запросам aiogram."""
-    from aiogram.client.session.aiohttp import AiohttpSession
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+# ---- aiogram: подмена в самом объекте метода перед отправкой ----
+def _is_html(pm) -> bool:
+    return pm is None or str(getattr(pm, "value", pm)).upper() == "HTML"
 
-    def _fix_markup(kb):
-        if not isinstance(kb, InlineKeyboardMarkup):
-            return kb
+
+def prepare_method(method):
+    """Меняет текст, подпись и кнопки у метода aiogram (sendMessage, editMessageText, sendPhoto и т.д.).
+    Вызывается из Bot.__call__ — через неё проходят все запросы бота."""
+    if not MAP or not hasattr(method, "__api_method__"):
+        return method
+    if _is_html(getattr(method, "parse_mode", None)):
+        for key in ("text", "caption"):
+            val = getattr(method, key, None)
+            if isinstance(val, str) and "<tg-emoji" not in val:
+                setattr(method, key, to_html(val))
+    markup = getattr(method, "reply_markup", None)
+    if markup is not None and hasattr(markup, "inline_keyboard"):
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
         rows = [[InlineKeyboardButton(**_button(b.model_dump(exclude_none=True))) for b in row]
-                for row in kb.inline_keyboard]
-        return InlineKeyboardMarkup(inline_keyboard=rows)
-
-    class PremiumEmojiSession(AiohttpSession):
-        async def make_request(self, bot, method, timeout=None):
-            if MAP:
-                updates = {}
-                if getattr(method, "parse_mode", None) in (None, "HTML"):
-                    for key in ("text", "caption"):
-                        val = getattr(method, key, None)
-                        if isinstance(val, str):
-                            updates[key] = to_html(val)
-                markup = getattr(method, "reply_markup", None)
-                if markup is not None:
-                    updates["reply_markup"] = _fix_markup(markup)
-                if updates:
-                    method = method.model_copy(update=updates)
-            return await super().make_request(bot, method, timeout)
-
-    return PremiumEmojiSession()
+                for row in markup.inline_keyboard]
+        setattr(method, "reply_markup", InlineKeyboardMarkup(inline_keyboard=rows))
+    return method
