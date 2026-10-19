@@ -220,12 +220,10 @@ def name_of(u) -> str:
 
 # Типы, у которых Telegram не даёт подпись (подписи у кружков и стикеров нет)
 CAPTIONLESS = {"video_note", "sticker"}
-# Подписи для уведомлений: «одноразовое» (сии — удаляется) и обычное (попозже — остаётся)
+# Подписи для уведомлений о сохранённом одноразовом медиа
 LABEL_ONCE = {"photo": "одноразовое фото", "video": "одноразовое видео", "video_note": "одноразовый кружок",
               "voice": "одноразовое голосовое", "audio": "одноразовое аудио", "animation": "одноразовая гифка",
               "document": "одноразовый файл", "sticker": "одноразовый стикер"}
-LABEL_KEEP = {"photo": "фото", "video": "видео", "video_note": "кружок", "voice": "голосовое",
-              "audio": "аудио", "animation": "гифку", "document": "файл", "sticker": "стикер"}
 
 
 async def send_media(bot: Bot, chat_id: int, media: dict, silent: bool = False, caption: str | None = None):
@@ -317,7 +315,7 @@ async def on_message(m: Message, bot: Bot):
             if not media:
                 return await bot.send_message(conn["user_chat_id"], "⚠️ В сообщении, на которое ты ответил, нет медиа (или Telegram его не отдал боту).")
             silent = U.setting(u, "silent", False)
-            label = (LABEL_ONCE if kind == "sii" else LABEL_KEEP)[media["type"]]
+            label = LABEL_ONCE[media["type"]]
             caption = f"🔄 сохранено {label} от <b>{name_of(m.reply_to_message.from_user)}</b>"
             try:
                 await send_media(bot, conn["user_chat_id"], media, silent, caption=caption)
