@@ -30,6 +30,13 @@ MAP: dict[str, str] = _load()
 _pattern = None
 
 
+def reload_map() -> None:
+    global MAP, _pattern
+    MAP = _load()
+    _pattern = None
+
+
+
 def _norm(glyph: str) -> str:
     return glyph.replace(_VS, "")
 
