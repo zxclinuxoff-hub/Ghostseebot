@@ -33,22 +33,26 @@ LINE = "━━━━━━━━━━━━━━"
 
 
 def main_caption(u) -> str:
+    """Подпись главного меню. Эмодзи — только из premium_emoji_map (to_html)."""
+    from ..services.premium_emoji import to_html
     name = html.escape(u.get("first_name") or "друг")
     if U.is_active(u):
         status = f"✅ <b>Подписка активна</b>\n┗ до {U.fmt_dt(u['sub_until'])} · осталось {U.days_left(u)} дн."
     else:
-        status = "⏸ <b>Подписка закончилась</b>\n┗ бот на паузе — продли в разделе «Подписка»"
-    return (
+        status = "⚠️ <b>Подписка закончилась</b>\n┗ бот на паузе — продли в разделе «Подписка»"
+    # 👀 и ⚙️ есть в карте; 🗑/👁/🛠 — нет ID → 👀/✏️/⚙️ пока нет своих
+    text = (
         "👻 <b>GhostSee</b>\n"
         "<i>видит то, что исчезает</i>\n\n"
         f"👋 Привет, <b>{name}</b>!\n{status}\n\n"
         f"{LINE}\n"
-        "🗑 Удалённые и изменённые сообщения\n"
-        "👁 Исчезающие фото и видео\n"
-        "🛠 Команды для чатов\n"
+        "✏️ Удалённые и изменённые сообщения\n"
+        "👀 Исчезающие фото и видео\n"
+        "⚙️ Команды для чатов\n"
         f"{LINE}\n\n"
         "👇 <b>Выбери раздел</b>"
     )
+    return to_html(text)
 
 
 def _banner(name: str) -> Path:
@@ -61,7 +65,9 @@ def _banner(name: str) -> Path:
 
 async def send_banner(target: Message, name: str, caption: str, kb):
     photo = _fid.get(name) or FSInputFile(_banner(name))
-    msg = await target.answer_photo(photo, caption=caption, reply_markup=kb)
+    from ..services.premium_emoji import to_html as _pe
+    caption = _pe(caption or "")
+    msg = await target.answer_photo(photo, caption=caption, reply_markup=kb, parse_mode="HTML")
     if name not in _fid and msg.photo:
         _fid[name] = msg.photo[-1].file_id
     return msg
@@ -74,10 +80,12 @@ async def show(cb: CallbackQuery, text: str, kb):
     if msg.photo and len(text) > 1000:
         text = text[:997] + "..."
     try:
+        from ..services.premium_emoji import to_html as _pe
+        text = _pe(text)
         if msg.photo:
-            await msg.edit_caption(caption=text, reply_markup=kb)
+            await msg.edit_caption(caption=text, reply_markup=kb, parse_mode="HTML")
         else:
-            await msg.edit_text(text, reply_markup=kb)
+            await msg.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest as e:
         err = str(e).lower()
         if "not modified" in err:
@@ -103,7 +111,8 @@ async def show_banner(cb: CallbackQuery, name: str, text: str, kb):
     """
     msg = cb.message
     if msg.photo:
-        caption = text[:1000]
+        from ..services.premium_emoji import to_html as _pe
+        caption = _pe(text[:1000])
         media = InputMediaPhoto(
             media=_fid.get(name) or FSInputFile(_banner(name)),
             caption=caption,
