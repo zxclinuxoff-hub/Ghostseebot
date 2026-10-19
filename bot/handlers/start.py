@@ -17,7 +17,9 @@ from ..services.logs import audit
 from ..texts import CMD_CATEGORIES, HELP_CMDS, SUPPORT_BOT, TUTORIAL
 
 router = Router(name="start")
-ASSETS = Path(__file__).resolve().parents[2] / "assets"
+_ROOT = Path(__file__).resolve().parents[2]
+# Linux чувствителен к регистру: assets / Assets
+ASSETS = next((d for d in (_ROOT / "assets", _ROOT / "Assets") if d.is_dir()), _ROOT / "assets")
 _fid: dict[str, str] = {}
 
 START_CAPTION = (
@@ -310,18 +312,18 @@ async def cb_cat(cb: CallbackQuery):
 
 @router.callback_query(F.data.startswith("cmdinfo:"))
 async def cb_cmdinfo(cb: CallbackQuery):
-    """Описание команды СВЕРХУ, сетка кнопок остаётся."""
+    """Описание команды сверху (цитата), сетка кнопок остаётся."""
     parts = cb.data.split(":")
     key = parts[1]
     page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
     from ..texts import CMD_INFO
-    desc = CMD_INFO.get(key, f"<code>.{key}</code>\nОписание скоро.")
-    await cb.answer()
-    text = (
-        f"🛠 <b>.{key}</b>\n{LINE}\n{desc}\n\n"
-        f"{LINE}\n"
-        "👇 Нажми другую команду или «В меню»"
+    desc = CMD_INFO.get(
+        key,
+        f"<code>.{key}</code> — команда\n\n"
+        f"<blockquote>Описание скоро.\n\nФормат ввода:\n<code>.{key}</code></blockquote>",
     )
+    await cb.answer()
+    text = f"🛠 <b>Функционал</b>\n{LINE}\n{desc}"
     await show(cb, text, K.cmds_grid_kb(page))
 
 

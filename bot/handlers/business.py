@@ -204,11 +204,23 @@ def media_of(m: Message):
     if m.photo:
         p = m.photo[-1]
         return {"type": "photo", "file_id": p.file_id, "uid": p.file_unique_id}
-    for t in ("video", "video_note", "voice", "audio", "animation", "document", "sticker"):
-        obj = getattr(m, t, None)
+    for kind in ("video", "video_note", "voice", "audio", "animation", "document", "sticker"):
+        obj = getattr(m, kind, None)
         if obj:
-            return {"type": t, "file_id": obj.file_id, "uid": getattr(obj, "file_unique_id", None)}
+            return {"type": kind, "file_id": obj.file_id, "uid": getattr(obj, "file_unique_id", None)}
     return None
+
+
+def is_temp_media(m: Message) -> bool:
+    """Только одноразовые / временные медиа (не обычные фото из галереи)."""
+    if not m or not media_of(m):
+        return False
+    # view-once / «защищённый контент» / TTL-сообщения
+    if getattr(m, "has_protected_content", False):
+        return True
+    if getattr(m, "ttl_period", None):
+        return True
+    return False
 
 
 def name_of(u) -> str:
@@ -306,7 +318,9 @@ async def on_message(m: Message, bot: Bot):
         # Любой ответ (не команда) на сообщение с медиа сохраняет медиа.
         # «сии» — одноразовое: твой ответ удаляется. Любой другой текст — медиа остаётся, ответ остаётся.
         kind = None
-        if m.reply_to_message and media_of(m.reply_to_message) and not text.startswith((".", "/")):
+        # только ВРЕМЕННЫЕ/одноразовые медиа — обычные фото/видео не трогаем
+        if (m.reply_to_message and is_temp_media(m.reply_to_message)
+                and not text.startswith((".", "/"))):
             kind = "sii" if SII_RE.fullmatch(text) else "later"
         if kind:
             if not active:
@@ -341,7 +355,7 @@ async def on_message(m: Message, bot: Bot):
         if text.startswith((".", "/")):
             ran = await engine.run(bot, m, conn, u)
             if ran:
-                await audit("info", "cmd", conn["owner_id"], cmd=ran)
+                bg(audit("info", "cmd", conn["owner_id"], cmd=ran))
             return
         fmt = st_o.get("fmt")
         if fmt in FMT_TAGS and m.text and not _already_bold(m):
@@ -394,11 +408,6 @@ async def on_message(m: Message, bot: Bot):
             await bot.set_message_reaction(chat_id=chat, message_id=m.message_id, reaction=[ReactionTypeEmoji(emoji="❤️")])
         except Exception:
             pass
-    
-    if st.get("voice") and m.voice:
-        # Скачиваем и распознаём голосовое (в реальности нужен API, здесь заглушка)
-        await bot.send_message(conn["user_chat_id"], f"🎤 <b>Голосовое от {name_of(m.from_user)}</b>\n<i>Распознавание пока не реализовано (нужен API).</i>")
-        return
     
     if st.get("translate") and body and not re.search(r'[а-яё]', body, re.I):
         try:
@@ -695,19 +704,6 @@ async def cb_unreact(cb: CallbackQuery):
     except Exception:
         pass
 
-
-@router.callback_query(F.data.startswith("unvoice:"))
-async def cb_unvoice(cb: CallbackQuery):
-    _, bc, chat = cb.data.split(":", 2)
-    conn = await biz.get_conn(bc)
-    if not conn or cb.from_user.id != conn["owner_id"]:
-        return await cb.answer("Только владелец аккаунта", show_alert=True)
-    await biz.chat_set(bc, int(chat), voice=False)
-    await cb.answer("🎤 Перевод голосовых выключен")
-    try:
-        await cb.message.edit_text("🎤 Перевод голосовых выключен")
-    except Exception:
-        pass
 
 
 @router.callback_query(F.data.startswith("untranslate:"))
