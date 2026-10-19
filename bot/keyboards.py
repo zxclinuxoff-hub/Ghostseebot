@@ -115,7 +115,7 @@ def settings_kb(u) -> M:
 
 
 def unmute_kb(bc: str, chat_id: int) -> M:
-    return M(inline_keyboard=[[B(text="🔊 Размутить", callback_data=f"unmute:{bc}:{chat_id}")]])
+    return M(inline_keyboard=[[B(text="🔈 Размутить", callback_data=f"unmute:{bc}:{chat_id}")]])
 
 
 def buy_shortcut() -> M:
@@ -125,23 +125,22 @@ def buy_shortcut() -> M:
 
 CMD_PAGES = {
     1: [
-        ("- ✍️ Текст -", [
-            [("bold", "bold"), ("italic", "italic"), ("mono", "mono"), ("line", "line")],
-            [("crossed", "crossed"), ("hidden", "hidden"), ("quote", "quote"), ("code", "code")],
-            [("morse", "morse"), ("sw", "sw"), ("anim", "anim"), ("type", "type")],
-            [("love", "love"), ("fire", "fire"), ("snow", "snow"), ("boom", "boom")],
-            [("encrypt", "encrypt"), ("decrypt", "decrypt"), ("emojis", "emojis"), ("cum", "cum")],
+        ("- 💬 Сообщения -", [
+            [("sw", "sw"), ("type", "type"), ("anim", "anim"), ("morse", "morse")],
+            [("fmt", "fmt"), ("love", "love"), ("fire", "fire"), ("snow", "snow")],
+            [("boom", "boom"), ("dox", "dox"), ("encrypt", "encrypt"), ("emojis", "emojis")],
+            [("cum", "cum")],
         ]),
         ("- 🔇 Собеседник -", [
             [("mute", "mute"), ("nomute", "nomute"), ("warn", "warn"), ("wsag", "wsag")],
             [("wbl", "wbl"), ("bw", "ban-words"), ("clone", "clone"), ("troll", "troll")],
             [("spam", "spam"), ("spamg", "spamg"), ("haha", "haha"), ("imit", "imit")],
-            [("echo", "echo"), ("rp", "rp"), ("typing", "typing"), ("gif", "gif")],
+            [("echo", "echo"), ("rp", "rp"), ("typing", "typing")],
         ]),
         ("- 🌙 Автоматика -", [
             [("afk", "afk"), ("auto", "auto"), ("burn", "burn"), ("bchat", "bchat")],
             [("remind", "remind"), ("remindf", "remindf"), ("timer", "timer"), ("bomb", "bomb")],
-            [("time", "time"), ("del", "del"), ("freeze", "freeze"), ("unknown", "unknown")],
+            [("time", "time"), ("del", "del"), ("freeze", "freeze")],
         ]),
     ],
     2: [
@@ -151,13 +150,11 @@ CMD_PAGES = {
             [("info", "info"), ("check", "check"), ("save", "save"), ("last", "last")],
             [("canary", "canary"), ("canary_stats", "canary+"), ("exif", "exif"), ("meta", "meta")],
             [("ex", "ex"), ("links", "links"), ("safety", "safety"), ("stats", "stats")],
-            [("wth", "wth"), ("core", "core"), ("watch", "watch"), ("proxy", "proxy")],
-            [("date", "date"), ("img", "img"), ("circ", "circ"), ("custom", "custom")],
-            [("promo", "promo"), ("fake", "fake"), ("story", "story"), ("unwatch", "unwatch")],
+            [("wth", "wth"), ("core", "core"), ("date", "date"), ("promo", "promo")],
         ]),
         ("- 🆕 Новое -", [
-            [("antispam", "antispam"), ("autoreply", "autore…"), ("react", "react"), ("voice", "voice")],
-            [("translate", "translate"), ("cold", "cold")],
+            [("antispam", "antispam"), ("autoreply", "autore…"), ("react", "react"), ("cold", "cold")],
+            [("translate", "translate")],
         ]),
         ("- 🎲 Игры -", [
             [("flip", "flip"), ("roll", "roll"), ("ball", "ball"), ("mb", "mb")],
