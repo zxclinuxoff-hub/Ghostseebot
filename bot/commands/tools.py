@@ -232,25 +232,6 @@ async def canary_stats(c: Ctx):
     await c.edit("\n".join(lines)[:4000])
 
 
-@command("fake_react", "mockreact")
-async def fake_react(c: Ctx):
-    """Отправляет владельцу явно помеченный макет реакции, не подделывая событие Telegram."""
-    parts = (c.args or "❤️").split(maxsplit=1)
-    emoji = parts[0]
-    allowed = {"❤️", "🔥", "😂", "👍", "👎", "😮", "😢", "🎉", "🤡", "💀", "🤔", "👀"}
-    if emoji not in allowed:
-        raise ValueError("эмодзи: ❤️ 🔥 😂 👍 👎 😮 😢 🎉 🤡 💀 🤔 👀")
-    note = parts[1] if len(parts) > 1 else ""
-    await c.note(
-        "🎭 <b>Макет реакции GhostSee</b>\n"
-        f"Реакция: {emoji}\n"
-        f"{('Комментарий: ' + esc(note)) if note else ''}\n\n"
-        "<i>Это демонстрация в личке владельца, не настоящая реакция Telegram и не уведомление от собеседника.</i>"
-    )
-    await c.edit("🎭 Макет реакции отправлен владельцу в личку. Настоящую реакцию это не подделывает.")
-
-
-# ================= утилиты =================
 @command("ai")
 async def ai(c: Ctx):
     if not cfg.ai_key:
@@ -923,20 +904,6 @@ async def unreact(c: Ctx):
     await c.delete()
 
 
-@command("voice")
-async def voice(c: Ctx):
-    await c.chat_set(voice=True)
-    kb = M(inline_keyboard=[[B(text="Отключить", callback_data=f"unvoice:{c.bc}:{c.chat_id}")]])
-    await c.note("🎤 Голосовые сообщения будут переводиться в текст и отправляться в этот чат", kb)
-    await c.delete()
-
-@command("unvoice")
-async def unvoice(c: Ctx):
-    await c.chat_set(voice=False)
-    await c.note("🎤 Перевод голосовых выключен")
-    await c.delete()
-
-
 @command("translate")
 async def translate(c: Ctx):
     await c.chat_set(translate=True)
@@ -971,11 +938,6 @@ async def uncold(c: Ctx):
 async def echo_cmd(c: Ctx):
     t = c.src or "..."
     await c.edit(esc(t))
-
-
-@command("gif")
-async def gif_cmd(c: Ctx):
-    await c.edit("🎞 Ответь на гифку/стикер или пришли файл — пока бот может только отметить: используй reply на media.")
 
 
 @command("emojis", "emoji")
@@ -1065,18 +1027,6 @@ async def save_cmd(c: Ctx):
     await c.edit("💾 Отправил тебе в личку с ботом")
 
 
-@command("watch")
-async def watch_cmd(c: Ctx):
-    await c.chat_set(watch=True)
-    await c.edit("👁 Режим watch: усиленные уведомления об изменениях в этом чате (если доступны)")
-
-
-@command("unwatch")
-async def unwatch_cmd(c: Ctx):
-    await c.chat_set(watch=False)
-    await c.edit("👁 Watch выключен")
-
-
 @command("wth")
 async def wth_cmd(c: Ctx):
     r = c.reply
@@ -1101,21 +1051,6 @@ async def core_cmd(c: Ctx):
     )
 
 
-@command("story")
-async def story_cmd(c: Ctx):
-    await c.edit("📖 Сторис через Business API ограничены. Используй обычную отправку медиа.")
-
-
-@command("img")
-async def img_cmd(c: Ctx):
-    await c.edit("🖼 Ответь на фото командой <code>.exif</code> для метаданных.")
-
-
-@command("circ")
-async def circ_cmd(c: Ctx):
-    await c.edit("⭕ Кружки: ответь «сии» / «попозже» на одноразовый video note — бот сохранит.")
-
-
 @command("calc")
 async def calc_cmd(c: Ctx):
     expr = (c.args or c.src or "").strip()
@@ -1129,11 +1064,6 @@ async def calc_cmd(c: Ctx):
         await c.edit(f"🧮 <code>{esc(expr)}</code> = <b>{val}</b>")
     except Exception:
         await c.edit("🧮 Ошибка выражения")
-
-
-@command("custom")
-async def custom_cmd(c: Ctx):
-    await c.edit("📎 Кастом: сохрани шаблон через автоответ <code>.auto текст</code>")
 
 
 @command("encrypt")
@@ -1184,11 +1114,6 @@ async def date_cmd(c: Ctx):
     await c.edit(f"📅 <b>{now.strftime('%d.%m.%Y')}</b>\n🕒 {now.strftime('%H:%M:%S')}\n{now.strftime('%A')}")
 
 
-@command("proxy")
-async def proxy_cmd(c: Ctx):
-    await c.edit("🛡 Прокси: бот работает через сервер Render. Свои SOCKS в Business-режим не прокидываются.")
-
-
 @command("links")
 async def links_cmd(c: Ctx):
     import re as _re
@@ -1218,42 +1143,6 @@ async def stats_cmd(c: Ctx):
         f"bw words: {len(st.get('bw') or [])}\n"
         f"nomute: {bool(st.get('nomute'))}"
     )
-
-
-@command("unknown")
-async def unknown_cmd(c: Ctx):
-    await c.edit("❔ Неизвестная команда. Список: /start → Функционал")
-
-
-_TTT_LINES = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
-_TTT_NUM = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
-_TTT_SYM = {"X": "❌", "O": "⭕"}
-
-
-def _ttt_winner(b):
-    for x, y, z in _TTT_LINES:
-        if b[x] and b[x] == b[y] == b[z]:
-            return b[x]
-    return None
-
-
-def _ttt_render(b, status: str) -> str:
-    rows = ["".join(_TTT_SYM.get(b[i]) or _TTT_NUM[i] for i in range(r * 3, r * 3 + 3)) for r in range(3)]
-    return "✖️ <b>Крестики-нолики</b> — ты ❌, бот ⭕\n" + "\n".join(rows) + f"\n\n{status}"
-
-
-def _ttt_bot_move(b):
-    empty = [i for i in range(9) if not b[i]]
-    for p in ("O", "X"):  # сначала свой выигрыш, потом блок
-        for i in empty:
-            t = b.copy()
-            t[i] = p
-            if _ttt_winner(t) == p:
-                return i
-    if 4 in empty:
-        return 4
-    corners = [i for i in (0, 2, 6, 8) if i in empty]
-    return random.choice(corners or empty)
 
 
 @command("ttt")
