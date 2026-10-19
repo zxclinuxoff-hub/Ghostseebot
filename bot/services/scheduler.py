@@ -95,9 +95,16 @@ async def warn_expiring_3d(bot: Bot):
 
 
 async def end_expired_freezes(bot: Bot):
-    rows = await db.select("gs_users", {"settings->>freeze_until": f"lt.{U.iso(U.now())}"})
+    # PostgREST-фильтр по jsonb ненадёжен — берём пачками и проверяем в Python
+    now = U.now()
+    rows = await db.select_all("gs_users", {"banned": "eq.false"})
     for u in rows:
-        if not (u.get("settings") or {}).get("freeze_until"):
+        s = u.get("settings") or {}
+        fu = s.get("freeze_until")
+        if not fu:
+            continue
+        ft = U.parse(fu) if isinstance(fu, str) else None
+        if not ft or ft > now:
             continue
         await U.end_freeze(u["tg_id"])
         try:

@@ -88,7 +88,7 @@ async def delete(code: str) -> None:
 
 async def redemptions(code: str, limit: int = 30) -> list:
     return await db.select("gs_promo_redemptions",
-                           {"code": f"eq.{_norm(code)}", "order": "created_at.desc", "limit": limit})
+                           {"code": f"eq.{_norm(code)}", "order": "redeemed_at.desc", "limit": limit})
 
 
 async def redeem(bot, uid: int, code: str) -> tuple[str, int]:
@@ -114,9 +114,22 @@ async def redeem(bot, uid: int, code: str) -> tuple[str, int]:
     days = int(p.get("days") or 0)
     if days < 1:
         return "bad", 0
-    await U.grant(uid, days)
-    await db.insert("gs_promo_redemptions", {"code": code, "tg_id": uid}, ignore=True, returning=False)
+    # сначала фиксация активации (unique code+tg_id) — защита от дабл-клика
+    try:
+        ins = await db.insert(
+            "gs_promo_redemptions",
+            {"code": code, "tg_id": uid},
+            upsert="code,tg_id",
+            ignore=True,
+            returning=True,
+        )
+    except Exception:
+        return "error", 0
+    # ignore-duplicates → пустой/без новой строки, если уже было
+    if not ins:
+        return "used", 0
     await db.update("gs_promos", {"code": f"eq.{code}"}, {"used": int(p.get("used") or 0) + 1})
+    await U.grant(uid, days)
     # бонус рефереру
     bonus = int(p.get("ref_bonus_days") or 0)
     if bonus > 0:

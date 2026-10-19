@@ -31,7 +31,7 @@ def fmt_dt(s) -> str:
 
 async def get_user(uid: int, fresh: bool = False):
     c = _cache.get(uid)
-    if c and not fresh and time.time() - c[0] < 20:
+    if c and not fresh and time.time() - c[0] < 60:
         return c[1]
     rows = await db.select("gs_users", {"tg_id": f"eq.{uid}"})
     u = rows[0] if rows else None
