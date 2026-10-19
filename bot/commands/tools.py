@@ -528,14 +528,35 @@ async def unbchat(c: Ctx):
 @command("mute")
 async def mute(c: Ctx):
     await c.chat_set(muted=True)
-    await c.edit("🤫 Собеседник в муте.\nСообщение восстанавливается не больше 5 раз подряд.\n⚠️ С юзерботом обход через .nomute не сработает.\nРазмутить: кнопка или <code>.unmute</code>",
-                 unmute_kb(c.bc, c.chat_id))
+    text = (
+        "🤫 <b>Собеседник в муте</b>\n"
+        "Сообщение восстанавливается не больше 5 раз подряд.\n"
+        "⚠️ С юзерботом обход через <code>.nomute</code> не сработает.\n"
+        "Размутить: кнопка или <code>.unmute</code>"
+    )
+    kb = unmute_kb(c.bc, c.chat_id)
+    # в личке с ботом — прем-эмодзи; в чате — короткий статус (Telegram режет прем у аккаунтов без Premium)
+    try:
+        await c.note(text, kb)
+    except Exception:
+        pass
+    try:
+        await c.edit("🤫 Собеседник в муте.\nРазмутить: <code>.unmute</code>", kb)
+    except Exception:
+        await c.say("🤫 Собеседник в муте.\nРазмутить: <code>.unmute</code>", kb)
 
 
 @command("unmute")
 async def unmute(c: Ctx):
     await c.chat_set(muted=False, warns=0)
-    await c.edit("😃 Мут снят")
+    try:
+        await c.note("✅ Мут снят")
+    except Exception:
+        pass
+    try:
+        await c.edit("✅ Мут снят")
+    except Exception:
+        await c.say("✅ Мут снят")
 
 
 @command("warn")

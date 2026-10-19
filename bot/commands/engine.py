@@ -68,7 +68,12 @@ class Ctx:
 
     async def edit(self, text, kb=None): return await biz.edit(self.bc, self.chat_id, self.mid, text, kb)
     async def say(self, text, kb=None): return await biz.send(self.bc, self.chat_id, text, kb)
-    async def note(self, text, kb=None): return await self.bot.send_message(self.conn["user_chat_id"], text, reply_markup=kb)
+    async def note(self, text, kb=None):
+        # личка с ботом: явно вшиваем tg-emoji (прем виден без Premium у юзера)
+        from ..services.premium_emoji import to_html
+        text = to_html(text or "")
+        return await self.bot.send_message(
+            self.conn["user_chat_id"], text, reply_markup=kb, parse_mode="HTML")
     async def chat_get(self): return await biz.chat_get(self.bc, self.chat_id)
     async def chat_set(self, **kw): return await biz.chat_set(self.bc, self.chat_id, **kw)
 
