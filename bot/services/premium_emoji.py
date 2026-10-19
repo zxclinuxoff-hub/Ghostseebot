@@ -113,7 +113,7 @@ def _is_html(pm) -> bool:
 
 
 def prepare_method(method):
-    """Меняет текст, подпись и кнопки у метода aiogram (sendMessage, editMessageText, sendPhoto и т.д.).
+    """Меняет текст, подпись и кнопки у метода aiogram (sendMessage, editMessageText, sendPhoto, editMedia…).
     Вызывается из Bot.__call__ — через неё проходят все запросы бота."""
     if not MAP or not hasattr(method, "__api_method__"):
         return method
@@ -122,6 +122,21 @@ def prepare_method(method):
             val = getattr(method, key, None)
             if isinstance(val, str) and "<tg-emoji" not in val:
                 setattr(method, key, to_html(val))
+    # InputMediaPhoto/Video… в editMessageMedia — caption лежит внутри media
+    media = getattr(method, "media", None)
+    if media is not None:
+        cap = getattr(media, "caption", None)
+        if isinstance(cap, str) and "<tg-emoji" not in cap:
+            try:
+                media.caption = to_html(cap)
+            except Exception:
+                pass
+        # parse_mode у media
+        if hasattr(media, "parse_mode") and getattr(media, "parse_mode", None) is None:
+            try:
+                media.parse_mode = "HTML"
+            except Exception:
+                pass
     markup = getattr(method, "reply_markup", None)
     if markup is not None and hasattr(markup, "inline_keyboard"):
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
