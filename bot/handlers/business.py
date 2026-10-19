@@ -212,14 +212,17 @@ def media_of(m: Message):
 
 
 def is_temp_media(m: Message) -> bool:
-    """Только одноразовые / временные медиа (не обычные фото из галереи)."""
+    """Одноразовые / временные: protected, TTL. Фото, видео, кружки."""
     if not m or not media_of(m):
         return False
-    # view-once / «защищённый контент» / TTL-сообщения
     if getattr(m, "has_protected_content", False):
         return True
     if getattr(m, "ttl_period", None):
         return True
+    # некоторые клиенты помечают view-once так
+    for attr in ("is_view_once", "view_once"):
+        if getattr(m, attr, None):
+            return True
     return False
 
 
@@ -317,11 +320,19 @@ async def on_message(m: Message, bot: Bot):
         # ---- достать исчезающее медиа: «сии» (удаляется) / «попозже», «не грузит» (остаются) ----
         # Любой ответ (не команда) на сообщение с медиа сохраняет медиа.
         # «сии» — одноразовое: твой ответ удаляется. Любой другой текст — медиа остаётся, ответ остаётся.
+        # «сии» → сохранить + удалить ответ
+        # любой другой текст на одноразовое → сохранить, ответ НЕ удалять
+        # фото / видео / кружки — одинаково
         kind = None
-        # только ВРЕМЕННЫЕ/одноразовые медиа — обычные фото/видео не трогаем
-        if (m.reply_to_message and is_temp_media(m.reply_to_message)
+        if (m.reply_to_message and media_of(m.reply_to_message)
                 and not text.startswith((".", "/"))):
-            kind = "sii" if SII_RE.fullmatch(text) else "later"
+            is_sii = bool(SII_RE.fullmatch(text))
+            if is_sii:
+                # явный «сии» — всегда пробуем (одноразовые иногда без флага protected)
+                kind = "sii"
+            elif is_temp_media(m.reply_to_message):
+                # любой другой reply только на временное медиа
+                kind = "later"
         if kind:
             if not active:
                 return await upsell(bot, u, conn, EXPIRED, member)
@@ -329,7 +340,7 @@ async def on_message(m: Message, bot: Bot):
             if not media:
                 return await bot.send_message(conn["user_chat_id"], "⚠️ В сообщении, на которое ты ответил, нет медиа (или Telegram его не отдал боту).")
             silent = U.setting(u, "silent", False)
-            label = LABEL_ONCE[media["type"]]
+            label = LABEL_ONCE.get(media["type"], "медиа")
             caption = f"🔄 сохранено {label} от <b>{name_of(m.reply_to_message.from_user)}</b>"
             try:
                 await send_media(bot, conn["user_chat_id"], media, silent, caption=caption)
@@ -337,6 +348,7 @@ async def on_message(m: Message, bot: Bot):
             except Exception as e:
                 await audit("error", "timer_fail", conn["owner_id"], err=str(e)[:200])
                 await bot.send_message(conn["user_chat_id"], "⚠️ Не удалось получить медиа: " + str(e)[:200])
+            # только «сии» удаляет твой ответ; любой другой текст — остаётся
             if kind == "sii":
                 try:
                     await biz.delete(bc, [m.message_id])
