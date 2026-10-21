@@ -12,7 +12,8 @@ import httpx
 from ..config import cfg
 from ..db import db
 from ..keyboards import unmute_kb
-from ..services import biz
+from ..services import afk_excl, biz
+from ..services.logs import audit
 from ..services import users as U
 from .engine import Ctx, command, dur, esc, REG
 from ..texts import HELP_CMDS
@@ -376,30 +377,41 @@ async def afk(c: Ctx):
     await c.edit(f"🌙 <b>AFK:</b> {esc(text)}\n⏱ Прошло: 0 мин.")
 
 
+@command("afk_ex")
+async def afk_ex(c: Ctx):
+    """Добавить собеседника этого чата в исключения .afk. Пишется прямо в диалоге с ним."""
+    pid = c.chat_id
+    if pid == c.conn["owner_id"]:
+        return await c.edit("⚠️ Нельзя добавить себя в исключения")
+    ch = c.m.chat
+    name = " ".join(x for x in (ch.first_name, ch.last_name) if x) or None
+    if ch.username:
+        name = f"{name} (@{ch.username})" if name else f"@{ch.username}"
+    try:
+        added = await afk_excl.add(c.conn["owner_id"], pid, name)
+    except Exception as e:
+        await audit("error", "afk_ex_failed", c.conn["owner_id"], err=str(e)[:200])
+        return await c.edit("⚠️ Не удалось сохранить исключение, попробуй позже")
+    await c.edit(("✅ Добавлен в исключения .afk — ему не будет автоответа" if added
+                  else "ℹ️ Он уже в исключениях .afk"))
+
+
+@command("afk_unex")
+async def afk_unex(c: Ctx):
+    """Убрать собеседника этого чата из исключений .afk."""
+    try:
+        removed = await afk_excl.remove(c.conn["owner_id"], c.chat_id)
+    except Exception as e:
+        await audit("error", "afk_unex_failed", c.conn["owner_id"], err=str(e)[:200])
+        return await c.edit("⚠️ Не удалось удалить, попробуй позже")
+    await c.edit("✅ Удалён из исключений .afk" if removed else "ℹ️ Его нет в исключениях .afk")
+
+
 @command("unafk")
 async def unafk(c: Ctx):
     a = (c.user.get("settings") or {}).get("afk")
     await U.set_settings(c.user["tg_id"], afk=None)
     await c.edit(f"✅ Я вернулся{' (был в AFK ' + U.elapsed(a['since']) + ')' if a else ''}")
-
-
-@command("auto")
-async def auto(c: Ctx):
-    if not c.args or c.args == "off":
-        await c.chat_set(auto=None)
-        await c.note("🤖 Автоответчик в этом чате выключен")
-    else:
-        await c.chat_set(auto=c.args)
-        kb = M(inline_keyboard=[[B(text="Отключить", callback_data=f"unauto:{c.bc}:{c.chat_id}")]])
-        await c.note("🤖 Автоответчик в этом чате включён", kb)
-    await c.delete()
-
-
-@command("unauto")
-async def unauto(c: Ctx):
-    await c.chat_set(auto=None)
-    await c.note("🤖 Автоответчик в этом чате выключен")
-    await c.delete()
 
 
 # ================= игры =================
@@ -1166,6 +1178,40 @@ async def stats_cmd(c: Ctx):
     )
 
 
+_TTT_LINES = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
+
+
+def _ttt_winner(b):
+    for x, y, z in _TTT_LINES:
+        if b[x] and b[x] == b[y] == b[z]:
+            return b[x]
+    return None
+
+
+def _ttt_bot_move(b):
+    """Бот: сначала выигрывает, если может, затем блокирует, затем центр, углы, остальное."""
+    empty = [i for i, v in enumerate(b) if not v]
+    for mark in ("O", "X"):
+        for i in empty:
+            t = list(b)
+            t[i] = mark
+            if _ttt_winner(t) == mark:
+                return i
+    if 4 in empty:
+        return 4
+    for i in (0, 2, 6, 8):
+        if i in empty:
+            return i
+    return empty[0]
+
+
+def _ttt_render(b, status):
+    sym = {"X": "❌", "O": "⭕"}
+    cells = [sym.get(v, str(i + 1)) for i, v in enumerate(b)]
+    rows = ["  ".join(cells[r * 3:r * 3 + 3]) for r in range(3)]
+    return "🎮 <b>Крестики-нолики</b>\n\n" + "\n".join(rows) + "\n\n" + status
+
+
 @command("ttt")
 async def ttt_cmd(c: Ctx):
     arg = (c.args or "").strip()
@@ -1345,6 +1391,23 @@ async def mb_alias(c: Ctx):
 @command("rd")
 async def rd_alias(c: Ctx):
     await roll(c)
+
+async def fake_react(c: Ctx):
+    """Макет реакции в личке владельца. Настоящую реакцию собеседник не увидит."""
+    raw = (c.args or "").split()
+    emoji = raw[0][:8] if raw else "❤️"
+    target = c.reply
+    preview = (target.text or target.caption or "") if target else ""
+    await c.delete()
+    body = f"«{esc(preview[:200])}»" if preview else "<i>(без текста)</i>"
+    await c.note(f"{esc(emoji)} <i>макет реакции</i>\n{body}\n\n"
+                 "<i>Это только макет в личке: реакция никому не ставится и собеседник её не видит.</i>")
+
+
+@command("fake_react")
+async def fake_react_cmd(c: Ctx):
+    await fake_react(c)
+
 
 @command("fake")
 async def fake_alias(c: Ctx):
