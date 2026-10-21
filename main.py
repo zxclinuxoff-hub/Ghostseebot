@@ -7,7 +7,7 @@ EXPECTED = {
     "bot": ["config.py", "db.py", "keyboards.py", "texts.py"],
     "bot/services": ["users.py", "biz.py", "billing.py", "billing_prices.py", "referrals.py",
                      "roulette.py", "scheduler.py", "logs.py", "gate.py"],
-    "bot/handlers": ["start.py", "payments.py", "admin.py", "business.py"],
+    "bot/handlers": ["start.py", "payments.py", "admin.py", "business.py", "extras.py"],
     "bot/commands": ["engine.py", "tools.py"],
 }
 
@@ -79,7 +79,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 
 from bot.config import cfg
-from bot.handlers import admin, business, payments, start
+from bot.handlers import admin, business, extras, payments, start
 from bot.services import scheduler
 from bot.services.gate import GateMiddleware
 from bot.services.logs import audit, is_network_error
@@ -102,7 +102,7 @@ dp = Dispatcher(storage=MemoryStorage())
 # порядок важен: админка первой (фильтр по ID), дальше остальное
 dp.message.outer_middleware(GateMiddleware())
 dp.callback_query.outer_middleware(GateMiddleware())
-dp.include_routers(admin.router, payments.router, business.router, start.router)
+dp.include_routers(admin.router, payments.router, business.router, extras.router, start.router)
 
 _tasks: set = set()
 _seen: dict = {}

@@ -198,3 +198,25 @@ alter table gs_promo_redemptions enable row level security;
 alter table gs_promos add column if not exists active boolean not null default true;
 alter table gs_users add column if not exists warned_3d boolean default false;
 
+
+-- ===== донат Telegram Stars (отдельно от тарифов) =====
+create table if not exists gs_donations (
+  charge_id text primary key,            -- уникальный id платежа от Telegram: защита от двойной обработки
+  tg_id bigint not null,
+  stars int not null,
+  payload text,
+  created_at timestamptz default now()
+);
+create index if not exists gs_donations_tg on gs_donations (tg_id, created_at desc);
+alter table gs_donations enable row level security;
+
+-- ===== исключения для .afk: собеседники, которым не отправляется AFK-ответ (по владельцу) =====
+create table if not exists gs_afk_exclusions (
+  owner_id bigint not null,              -- владелец Business-аккаунта
+  excluded_id bigint not null,           -- Telegram ID собеседника
+  excluded_name text,
+  created_at timestamptz default now(),
+  primary key (owner_id, excluded_id)    -- дубликаты невозможны
+);
+create index if not exists gs_afk_excl_owner on gs_afk_exclusions (owner_id, created_at desc);
+alter table gs_afk_exclusions enable row level security;
