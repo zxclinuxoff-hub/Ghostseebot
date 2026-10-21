@@ -15,7 +15,7 @@ from aiogram.types import BufferedInputFile, BusinessConnection, BusinessMessage
 from ..commands import engine
 from ..commands import tools  # noqa: F401  (регистрирует команды)
 from ..keyboards import buy_shortcut, channel_kb
-from ..services import biz, gate
+from ..services import afk_excl, biz, gate
 from ..services import users as U
 from ..services.logs import audit, bg
 from ..services.forum_logs import log_business_message, log_deleted
@@ -437,10 +437,9 @@ async def on_message(m: Message, bot: Bot):
         await biz.chat_set(bc, chat, last_clone=now)
         return await biz.send(bc, chat, esc(m.text))
     afk = (u.get("settings") or {}).get("afk")
-    if st.get("auto") and now - st.get("last_auto", 0) > 60:
-        await biz.chat_set(bc, chat, last_auto=now)
-        return await biz.send(bc, chat, esc(st["auto"]))
     if afk and now - st.get("last_afk", 0) > 180:
+        if await afk_excl.is_excluded(conn["owner_id"], m.from_user.id):
+            return  # собеседник в исключениях — ни ответа, ни повторного таймера
         await biz.chat_set(bc, chat, last_afk=now)
         await biz.send(bc, chat, f"🌙 <b>AFK:</b> {esc(afk['text'])}\n⏱ Прошло: {U.elapsed(afk['since'])}")
 
@@ -530,19 +529,20 @@ async def on_deleted(d: BusinessMessagesDeleted, bot: Bot):
                 pass
         bg(biz.drop_msg(bc, d.chat.id, mid))
         if rec.get("out"):
-            # .nomute: моё сообщение удалили сразу после отправки (чужой мут) — отправляем ещё раз (один раз)
-            if rec.get("text") and time.time() - (rec.get("ts") or 0) < 4:
+            # .nomute: моё сообщение удалили сразу после отправки (чужой мут) — отправляем ещё раз
+            if rec.get("text") and time.time() - (rec.get("ts") or 0) < 4 and _nomute_once(bc, d.chat.id, mid):
                 st = st or await biz.chat_get(bc, d.chat.id)
                 if st.get("nomute"):
-                    ncount = int(st.get("nomute_count") or 0)
-                    if ncount >= 5:
-                        await biz.chat_set(bc, d.chat.id, nomute=False, nomute_count=0)
+                    now = time.time()
+                    # «подряд»: серия сбрасывается, если прошло больше 5 минут без повторов
+                    streak = int(st.get("nomute_count") or 0) if now - float(st.get("nomute_last") or 0) < _NOMUTE_WINDOW else 0
+                    if streak >= _NOMUTE_LIMIT:
+                        bg(biz.chat_set(bc, d.chat.id, nomute=False, nomute_count=0, nomute_last=0))
                         await audit("info", "nomute_limit", conn["owner_id"])
                     else:
-                        await biz.chat_set(bc, d.chat.id, nomute_count=ncount + 1)
-                        # Обфускация текста, чтобы обойти ботов
-                        obfuscated = rec["text"].replace(" ", "\u200b ").replace("о", "o").replace("а", "a")
-                        await biz.send(bc, d.chat.id, esc(obfuscated))
+                        # сначала отправка (быстрее), запись счётчика — в фоне
+                        await biz.send(bc, d.chat.id, esc(_obfuscate(rec["text"])))
+                        bg(biz.chat_set(bc, d.chat.id, nomute_count=streak + 1, nomute_last=now))
                         await audit("info", "nomute_resend", conn["owner_id"])
             continue
         if not notify:
@@ -562,6 +562,29 @@ async def on_deleted(d: BusinessMessagesDeleted, bot: Bot):
 
 
 # ---------------- кнопка «Размутить» ----------------
+_NOMUTE_LIMIT = 5          # повторов подряд
+_NOMUTE_WINDOW = 300.0     # сек: дольше — серия начинается заново
+_RESENT: set = set()       # одно удалённое сообщение — один повтор (дубли событий удаления не плодят копии)
+
+
+def _nomute_once(bc: str, chat: int, mid: int) -> bool:
+    key = (bc, chat, mid)
+    if key in _RESENT:
+        return False
+    if len(_RESENT) > 5000:
+        _RESENT.clear()
+    _RESENT.add(key)
+    return True
+
+
+_LATIN = {"о": "o", "а": "a"}
+
+
+def _obfuscate(text: str) -> str:
+    """Текст для повтора: нулевой пробел перед пробелом и латинские «о/а» вместо кириллицы."""
+    return "".join(_LATIN.get(ch, ch) for ch in text.replace(" ", "\u200b "))
+
+
 @router.callback_query(F.data.startswith("unmute:"))
 async def cb_unmute(cb: CallbackQuery):
     _, bc, chat = cb.data.split(":", 2)
@@ -643,20 +666,6 @@ async def cb_unnomute(cb: CallbackQuery):
     await cb.answer("🔓 Обход мута выключен")
     try:
         await cb.message.edit_text("🔓 Обход мута выключен")
-    except Exception:
-        pass
-
-
-@router.callback_query(F.data.startswith("unauto:"))
-async def cb_unauto(cb: CallbackQuery):
-    _, bc, chat = cb.data.split(":", 2)
-    conn = await biz.get_conn(bc)
-    if not conn or cb.from_user.id != conn["owner_id"]:
-        return await cb.answer("Только владелец аккаунта", show_alert=True)
-    await biz.chat_set(bc, int(chat), auto=None)
-    await cb.answer("🤖 Автоответчик выключен")
-    try:
-        await cb.message.edit_text("🤖 Автоответчик выключен")
     except Exception:
         pass
 

@@ -17,7 +17,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton as B, InlineKeyboa
 
 from .. import keyboards as K
 from ..config import cfg
-from ..db import db
+from ..db import DBError, db
 from ..services import users as U
 from ..services.logs import audit
 from ..services import settings as S
@@ -68,13 +68,25 @@ async def build_stats() -> str:
     rl = {k: await db.count("gs_logs", {"event": "eq.roulette_result", "ts": f"gt.{w7}", "details->>outcome": f"eq.{k}"}) for k in outcomes}
     spins = sum(rl.values())
     ref7 = await db.count("gs_referrals", {"status": "eq.credited", "credited_at": f"gt.{w7}"})
+    try:
+        dons = await db.select_all("gs_donations")
+        d_total = sum(x["stars"] for x in dons)
+        d_day = sum(x["stars"] for x in dons if t(x) > n - dt.timedelta(days=1))
+        d_top = Counter()
+        for x in dons:
+            d_top[x["tg_id"]] += x["stars"]
+        d_top_txt = "\n".join(f"  <code>{uid}</code> — {s}⭐" for uid, s in d_top.most_common(5)) or "  —"
+        dtxt = (f"🖤 <b>Донаты</b>: {len(dons)} шт. · {d_total}⭐ всего · {d_day}⭐ за сутки\n"
+                f"Топ поддержавших:\n{d_top_txt}\n\n")
+    except DBError:
+        dtxt = "🖤 <b>Донаты</b>: нет данных (ошибка базы)\n\n"
     rtxt = (f"🎰 <b>Рулетка за 7 дн.</b>: {spins} круток\n"
             f"  +1д: {rl['d1']} · +2д: {rl['d2']} · +3д: {rl['d3']} · скидка 3м: {rl['disc_m3']} · скидка год: {rl['disc_y1']} · без приза: {rl['none']}\n"
             f"🎁 Рефералов подтверждено за 7 дн.: {ref7}\n\n")
     return (f"📊 <b>Статистика</b>\n\n👥 Пользователей: {total} (+{new24} за сутки)\n✅ Активных подписок: {active}\n🛒 Платили: {payers}\n⛔ Забанено: {banned}\n\n"
             f"💰 <b>Доход</b>: {sum(p['stars'] for p in pays)}⭐ всего · {rev(7)}⭐ / 7 дн · {rev(30)}⭐ / 30 дн\n"
             f"Покупки: 1м — {by_plan['m1']}, 3м — {by_plan['m3']}, год — {by_plan['y1']}\nПартнёрам начислено: {partner_total}⭐\n\n"
-            f"👥 <b>Рефералы</b>: подтверждено {ref_ok}, ждут подписки {ref_wait}\nТоп:\n{top_txt}\n\n{rtxt}🔴 Ошибок за сутки: {errs}")
+            f"👥 <b>Рефералы</b>: подтверждено {ref_ok}, ждут подписки {ref_wait}\nТоп:\n{top_txt}\n\n{dtxt}{rtxt}🔴 Ошибок за сутки: {errs}")
 
 
 async def partners_text() -> str:
