@@ -89,7 +89,7 @@ CMD_CATEGORIES = {
 
 <code>.afk [текст]</code> — режим AFK: собеседникам отвечаю с таймером «Прошло: X мин.»
 <code>.unafk</code> — выключить AFK
-<code>.auto текст</code> — автоответчик в этом чате · <code>.auto off</code>
+<code>.afk_ex</code> — не отправлять AFK этому собеседнику · <code>.afk_unex</code> — вернуть
 <code>.burn 30 текст</code> — самоудаляющееся сообщение (30 сек, можно 1m)
 <code>.bchat 10m</code> — мои сообщения в чате удаляются через 10 мин · <code>.bchat off</code>
 <code>.remind 10m текст</code> — напомню тебе в личку
@@ -162,7 +162,7 @@ CMD_CATEGORIES = {
 HELP_CMDS = """<b>🛠 Команды</b> (префикс <code>.</code> или <code>/</code>)
 
 🔇 <b>Собеседник:</b> .mute .unmute .nomute .warn .wsag .wbl .bw .clone .troll .spam .haha .spamg .imit .dox
-🌙 <b>Автоматика:</b> .afk .unafk .auto .burn .bchat .remind .remindf .time .del
+🌙 <b>Автоматика:</b> .afk .unafk .burn .bchat .remind .remindf .time .del
 ✍️ <b>Текст:</b> .bold/.unbold .italic/.unitalic .mono .line .crossed .hidden .quote .code .morse .sw .anim .type .love .fire .snow .boom .cum
 🧰 <b>Утилиты:</b> .ai .tl .rates .short .unshort .link .qr .geo .info
 🎲 <b>Игры:</b> .flip .roll .ball .rps .revo .duel
@@ -173,12 +173,31 @@ HELP_CMDS = """<b>🛠 Команды</b> (префикс <code>.</code> или 
 
 
 CMD_INFO = {
+    'fake_react': '<code>.fake_react ❤️</code> — макет реакции\n\n<blockquote>Показывает в личке, как выглядела бы реакция на сообщение. Настоящую реакцию собеседник не видит.\n\nФормат ввода:\n<code>.fake_react ❤️</code> ответом на сообщение</blockquote>',
+    'afk_ex': '<code>.afk_ex</code> — исключить этого собеседника из AFK\n\n<blockquote>Пиши в диалоге с нужным человеком. После этого ему не будет уходить AFK-ответ.\n\nФормат ввода:\n<code>.afk_ex</code></blockquote>',
+    'afk_unex': '<code>.afk_unex</code> — вернуть AFK-ответ этому собеседнику\n\n<blockquote>Убирает человека из исключений .afk.\n\nФормат ввода:\n<code>.afk_unex</code></blockquote>',
+    'unafk': '<code>.unafk</code> — выключить AFK\n\n<blockquote>Режим AFK выключается для всех собеседников. Исключения сохраняются.\n\nФормат ввода:\n<code>.unafk</code></blockquote>',
+    'unantispam': '<code>.unantispam</code> — выключить антиспам\n\n<blockquote>Отключает фильтр, который удаляет спам в чате.\n\nФормат ввода:\n<code>.unantispam</code></blockquote>',
+    'unautoreply': '<code>.unautoreply</code> — выключить автореплай\n\n<blockquote>Останавливает случайные фразы-ответы в этом чате.\n\nФормат ввода:\n<code>.unautoreply</code></blockquote>',
+    'unbchat': '<code>.unbchat</code> — выключить автоудаление сообщений\n\n<blockquote>Свои сообщения в этом чате перестают удаляться по таймеру.\n\nФормат ввода:\n<code>.unbchat</code></blockquote>',
+    'unclone': '<code>.unclone</code> — выключить клон\n\n<blockquote>Перестаёт повторять сообщения собеседника в этом чате.\n\nФормат ввода:\n<code>.unclone</code></blockquote>',
+    'uncold': '<code>.uncold</code> — выключить холодные ответы\n\n<blockquote>Бот перестаёт отвечать короткими фразами на каждое сообщение.\n\nФормат ввода:\n<code>.uncold</code></blockquote>',
+    'unnomute': '<code>.unnomute</code> — выключить обход мута\n\n<blockquote>Повторная отправка удалённых сообщений прекращается.\n\nФормат ввода:\n<code>.unnomute</code></blockquote>',
+    'unreact': '<code>.unreact</code> — выключить автореакцию\n\n<blockquote>Бот перестаёт ставить ❤️ на сообщения собеседника.\n\nФормат ввода:\n<code>.unreact</code></blockquote>',
+    'unshort': '<code>.unshort</code> — выключить сокращение ссылок\n\n<blockquote>Ссылки в этом чате больше не сокращаются.\n\nФормат ввода:\n<code>.unshort</code></blockquote>',
+    'untranslate': '<code>.untranslate</code> — выключить перевод\n\n<blockquote>Перевод иностранных сообщений собеседника выключается.\n\nФормат ввода:\n<code>.untranslate</code></blockquote>',
+    'untroll': '<code>.untroll</code> — выключить троллинг\n\n<blockquote>Бот перестаёт отвечать троллящими фразами.\n\nФормат ввода:\n<code>.untroll</code></blockquote>',
+    'unwbl': '<code>.unwbl</code> — выключить чёрный список слов\n\n<blockquote>Сообщения с запрещёнными словами перестают удаляться.\n\nФормат ввода:\n<code>.unwbl</code></blockquote>',
+    'unwsag': '<code>.unwsag</code> — выключить фильтр стикеров и гифок\n\n<blockquote>Стикеры и гифки собеседника перестают удаляться.\n\nФормат ввода:\n<code>.unwsag</code></blockquote>',
+    'decrypt': '<code>.decrypt</code> — расшифровка\n\n<blockquote>Обратная операция к <code>.encrypt</code>: сдвигает латинские буквы назад на 3.\n\nФормат ввода:\n<code>.decrypt текст</code> или ответом на сообщение</blockquote>',
+    'emoji': '<code>.emoji</code> — эмодзи-строка\n\n<blockquote>Повторяет переданный символ или текст в виде строки. Без аргумента — 👻.\n\nФормат ввода:\n<code>.emoji 🔥</code></blockquote>',
+    'help': '<code>.help</code> — справка по командам\n\n<blockquote>Полный список команд приходит одним сообщением в личку.\n\nФормат ввода:\n<code>.help</code></blockquote>',
+    'cmds': '<code>.cmds</code> — то же, что <code>.help</code>\n\n<blockquote>Полный список команд приходит в личку.\n\nФормат ввода:\n<code>.cmds</code></blockquote>',
     'afk': '<code>.afk</code> — AFK\n\n<blockquote>Автоответ, пока тебя нет.\n\nФормат ввода:\n<code>.afk отошёл</code>\nснять: <code>.unafk</code></blockquote>',
     'ai': '<code>.ai</code> — нейросеть\n\n<blockquote>Запрос к ИИ (если включён ключ на сервере).\n\nФормат ввода:\n<code>.ai вопрос</code></blockquote>',
     'anim': '<code>.anim</code> — анимация\n\n<blockquote>Показывает короткую emoji-анимацию в чате.\n\nФормат ввода:\n<code>.anim</code></blockquote>',
     'antispam': '<code>.antispam</code> — антиспам\n\n<blockquote>Режет спам-сообщения в чате.\n\nФормат ввода:\n<code>.antispam</code> / <code>.unantispam</code></blockquote>',
-    'auto': '<code>.auto</code> — автоответ\n\n<blockquote>Постоянный автоответ в этом чате.\n\nФормат ввода:\n<code>.auto текст</code>\nвыкл: <code>.unauto</code></blockquote>',
-    'autoreply': '<code>.autoreply</code> — автореплай\n\n<blockquote>Синоним автоответа.\n\nФормат ввода:\n<code>.auto текст</code></blockquote>',
+    'autoreply': '<code>.autoreply</code> — автореплай\n\n<blockquote>Синоним автоответа.\n\nФормат ввода:\n<code>.autoreply текст</code></blockquote>',
     'ball': '<code>.ball</code> — шар судьбы\n\n<blockquote>Ответ на вопрос да/нет.\n\nФормат ввода:\n<code>.ball повезёт?</code></blockquote>',
     'bchat': '<code>.bchat</code> — таймер чата\n\n<blockquote>Все твои сообщения в чате удаляются через N сек.\n\nФормат ввода:\n<code>.bchat 30</code>\nвыкл: <code>.unbchat</code></blockquote>',
     'bomb': '<code>.bomb</code> — бомба\n\n<blockquote>Сообщение с таймером самоудаления.\n\nФормат ввода:\n<code>.bomb 15 текст</code></blockquote>',
@@ -189,12 +208,10 @@ CMD_INFO = {
     'canary': '<code>.canary</code> — ссылка-маяк\n\n<blockquote>Прозрачная ссылка: узнаешь, когда её откроют (без IP).\n\nФормат ввода:\n<code>.canary метка</code></blockquote>',
     'canary_stats': '<code>.canary_stats</code> — статистика маяков\n\n<blockquote>Клики по твоим canary-ссылкам.\n\nФормат ввода:\n<code>.canary_stats</code></blockquote>',
     'check': '<code>.check</code> — проверка\n\n<blockquote>Быстрая проверка @user или ссылки.\n\nФормат ввода:\n<code>.check @user</code></blockquote>',
-    'circ': '<code>.circ</code> — кружки\n\n<blockquote>Про одноразовые video note: reply «сии» / «попозже».\n\nФормат ввода:\nreply «сии» на кружок</blockquote>',
     'clone': '<code>.clone</code> — клон\n\n<blockquote>Повторяет сообщения собеседника от твоего имени (осторожно).\n\nФормат ввода:\n<code>.clone</code> / <code>.unclone</code></blockquote>',
     'cold': '<code>.cold</code> — холод\n\n<blockquote>Короткие сухие ответы собеседнику.\n\nФормат ввода:\n<code>.cold</code> / <code>.uncold</code></blockquote>',
     'core': '<code>.core</code> — core-статус\n\n<blockquote>Служебный статус чата (mute/afk/warns).\n\nФормат ввода:\n<code>.core</code></blockquote>',
     'cum': '<code>.cum</code> — спец-эффект\n\n<blockquote>Шуточная анимация/эффект в чате.\n\nФормат ввода:\n<code>.cum</code></blockquote>',
-    'custom': '<code>.custom</code> — шаблоны\n\n<blockquote>Кастом через автоответ.\n\nФормат ввода:\n<code>.auto текст</code></blockquote>',
     'date': '<code>.date</code> — дата\n\n<blockquote>Текущая дата и время.\n\nФормат ввода:\n<code>.date</code></blockquote>',
     'del': '<code>.del</code> — удалить\n\n<blockquote>Удаляет сообщение (reply) или своё.\n\nФормат ввода:\nreply + <code>.del</code></blockquote>',
     'dox': '<code>.dox</code> — «докс»-шутка\n\n<blockquote>Шуточный «скан» собеседника. Не реальный докс.\n\nФормат ввода:\nreply + <code>.dox</code></blockquote>',
@@ -207,13 +224,10 @@ CMD_INFO = {
     'fake': '<code>.fake</code> — fake react\n\n<blockquote>Демо/макет реакции.\n\nФормат ввода:\n<code>.fake</code></blockquote>',
     'fire': '<code>.fire</code> — огонь\n\n<blockquote>Анимация огня.\n\nФормат ввода:\n<code>.fire</code></blockquote>',
     'flip': '<code>.flip</code> — монетка\n\n<blockquote>Орёл или решка.\n\nФормат ввода:\n<code>.flip</code></blockquote>',
-    'fmt': '<code>.fmt</code> — формат текста\n\n<blockquote>Включает авто-оформление твоих сообщений (жирный/курсив и т.д.).\n\nФормат ввода:\n<code>.fmt bold</code> · <code>.fmt off</code></blockquote>',
     'freeze': '<code>.freeze</code> — заморозка бота\n\n<blockquote>Полный стоп на N дней: нет команд, удаляшек, сии. Подписка на паузе. Снять — кнопкой в личке.\n\nФормат ввода:\n<code>.freeze 7</code>\nснять: кнопка «Разморозить»</blockquote>',
     'geo': '<code>.geo</code> — гео\n\n<blockquote>Инфо по IP/гео (если доступно).\n\nФормат ввода:\n<code>.geo</code></blockquote>',
-    'gif': '<code>.gif</code> — гифки\n\n<blockquote>Подсказка/работа с гифками в чате.\n\nФормат ввода:\nreply на гифку + <code>.gif</code></blockquote>',
     'guess': '<code>.guess</code> — ход Wordle\n\n<blockquote>После <code>.wordle</code> — слово из 5 букв.\n\nФормат ввода:\n<code>.guess crane</code></blockquote>',
     'haha': '<code>.haha</code> — спам смехом\n\n<blockquote>Шлёт пачки «ХАХА/ХВХА».\n\nФормат ввода:\n<code>.haha 10</code></blockquote>',
-    'img': '<code>.img</code> — картинки\n\n<blockquote>Подсказка по медиа (EXIF и т.п.).\n\nФормат ввода:\nreply + <code>.exif</code></blockquote>',
     'imit': '<code>.imit</code> — имитация статуса\n\n<blockquote>Показывает «печатает / записывает голосовое» и т.п.\n\nФормат ввода:\n<code>.imit typing</code>\n<code>.imit voice</code></blockquote>',
     'info': '<code>.info</code> — инфо о человеке\n\n<blockquote>ID, username собеседника.\n\nФормат ввода:\nreply + <code>.info</code></blockquote>',
     'last': '<code>.last</code> — последнее удалённое\n\n<blockquote>Показывает последнее сохранённое удалённое в этом чате.\n\nФормат ввода:\n<code>.last</code></blockquote>',
@@ -227,7 +241,6 @@ CMD_INFO = {
     'mute': '<code>.mute</code> — мутит собеседника\n\n<blockquote>Удаляет все сообщения собеседника, пока мут не снять. Восстановление «чужим» ботом — не больше 5 раз подряд.\n\nФормат ввода:\n<code>.mute</code>\nотключить: <code>.unmute</code></blockquote>',
     'nomute': '<code>.nomute</code> — обход чужого мута\n\n<blockquote>Если твоё сообщение сразу удалили — бот отправит его ещё раз (до 5 раз). С юзерботом у собеседника может не сработать.\n\nФормат ввода:\n<code>.nomute</code>\nвыключить: снова <code>.nomute</code> или кнопка</blockquote>',
     'promo': '<code>.promo</code> — промокод\n\n<blockquote>Активирует промокод (дни подписки).\n\nФормат ввода:\n<code>.promo КОД</code>\nили /start promo_КОД</blockquote>',
-    'proxy': '<code>.proxy</code> — прокси\n\n<blockquote>Справка: бот на сервере, SOCKS в Business не прокидывается.\n\nФормат ввода:\n<code>.proxy</code></blockquote>',
     'qr': '<code>.qr</code> — QR-код\n\n<blockquote>Генерирует QR из текста/ссылки.\n\nФормат ввода:\n<code>.qr https://t.me/ghostseebot</code></blockquote>',
     'rates': '<code>.rates</code> — курсы\n\n<blockquote>Курсы валют (если источник доступен).\n\nФормат ввода:\n<code>.rates USD</code></blockquote>',
     'rd': '<code>.roll</code> — кубик\n\n<blockquote>Случайное число.\n\nФормат ввода:\n<code>.roll</code> · <code>.roll 100</code></blockquote>',
@@ -246,7 +259,6 @@ CMD_INFO = {
     'spam': '<code>.spam</code> — спам текстом\n\n<blockquote>Отправляет текст несколько раз (лимит пачек).\n\nФормат ввода:\n<code>.spam 5 привет</code></blockquote>',
     'spamg': '<code>.spamg</code> — спам гифками/стикерами\n\n<blockquote>Спам медиа из reply.\n\nФормат ввода:\nreply + <code>.spamg 5</code></blockquote>',
     'stats': '<code>.stats</code> — стата чата\n\n<blockquote>Мут, варны, bw, nomute в этом чате.\n\nФормат ввода:\n<code>.stats</code></blockquote>',
-    'story': '<code>.story</code> — сторис\n\n<blockquote>Сторис через Business API ограничены.\n\nФормат ввода:\n<code>.story</code></blockquote>',
     'sw': '<code>.sw</code> — переворот текста\n\n<blockquote>Переворачивает слова или буквы в тексте (ответом на сообщение или из аргумента).\n\nФормат ввода:\n<code>.sw текст</code>\nили reply + <code>.sw</code></blockquote>',
     'time': '<code>.time</code> — время в имени\n\n<blockquote>Подставляет время в имя бизнес-аккаунта (нужны права).\n\nФормат ввода:\n<code>.time</code></blockquote>',
     'timer': '<code>.timer</code> — таймер\n\n<blockquote>Через N секунд пришлёт сообщение.\n\nФормат ввода:\n<code>.timer 30 готово</code></blockquote>',
@@ -258,12 +270,8 @@ CMD_INFO = {
     'type': '<code>.type</code> — печать\n\n<blockquote>Печатает текст с эффектом набора по символам.\n\nФормат ввода:\n<code>.type привет мир</code></blockquote>',
     'typing': '<code>.typing</code> — «печатает»\n\n<blockquote>Имитация набора N секунд.\n\nФормат ввода:\n<code>.typing 5</code></blockquote>',
     'unfreeze': '<code>.unfreeze</code> — разморозка\n\n<blockquote>Снимает freeze (в чате во время freeze не работает — только кнопка в боте).\n\nФормат ввода:\nкнопка в личке / <code>.unfreeze</code> если уже не заморожен</blockquote>',
-    'unknown': '<code>.unknown</code> — справка\n\n<blockquote>Подсказка, если команда не распознана.\n\nФормат ввода:\n<code>.unknown</code></blockquote>',
     'unmute': '<code>.unmute</code> — снять мут\n\n<blockquote>Снимает мут с собеседника в этом чате.\n\nФормат ввода:\n<code>.unmute</code></blockquote>',
-    'unwatch': '<code>.unwatch</code> — выкл watch\n\n<blockquote>Выключает режим watch.\n\nФормат ввода:\n<code>.unwatch</code></blockquote>',
-    'voice': '<code>.voice</code> — голос\n\n<blockquote>Уведомления о голосовых (распознавание — если подключено).\n\nФормат ввода:\n<code>.voice</code> / <code>.unvoice</code></blockquote>',
     'warn': '<code>.warn</code> — предупреждение\n\n<blockquote>Выдаёт варн собеседнику. После лимита — действие по настройке чата.\n\nФормат ввода:\n<code>.warn</code> · reply</blockquote>',
-    'watch': '<code>.watch</code> — watch\n\n<blockquote>Усиленные уведомления по чату.\n\nФормат ввода:\n<code>.watch</code> / <code>.unwatch</code></blockquote>',
     'wbl': '<code>.wbl</code> — мат-фильтр\n\n<blockquote>Удаляет сообщения с матом.\n\nФормат ввода:\n<code>.wbl</code> / <code>.unwbl</code></blockquote>',
     'wordle': '<code>.wordle</code> — Wordle\n\n<blockquote>Слово из 5 букв, 6 попыток.\n\nФормат ввода:\n<code>.wordle</code>\nход: <code>.guess слово</code></blockquote>',
     'wsag': '<code>.wsag</code> — без стикеров/гифок\n\n<blockquote>Удаляет стикеры и анимации собеседника.\n\nФормат ввода:\n<code>.wsag</code> / <code>.unwsag</code></blockquote>',

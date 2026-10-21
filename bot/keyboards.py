@@ -24,10 +24,12 @@ def main_menu(uid: int | None = None) -> M:
         *admin_rows,
         [B(text="⭐ Подключить", callback_data="connect")],
         [B(text="⬆️ Обновить тариф", callback_data="buy")],
+        [B(text="⭐ Поддержать разработчика", callback_data="donate")],
         [
             B(text="🧩 Функционал", callback_data="cmds"),
             B(text="⚙️ Настройки", callback_data="settings"),
         ],
+        [B(text="⚙️ Настройка команд", callback_data="cmdcfg")],
         [
             B(text="🎰 Рулетка", callback_data="roulette"),
             B(text="🎁 Заработать", callback_data="refs"),
@@ -138,9 +140,10 @@ CMD_PAGES = {
             [("echo", "echo"), ("rp", "rp"), ("typing", "typing")],
         ]),
         ("- 🌙 Автоматика -", [
-            [("afk", "afk"), ("auto", "auto"), ("burn", "burn"), ("bchat", "bchat")],
+            [("afk", "afk"), ("burn", "burn"), ("bchat", "bchat")],
             [("remind", "remind"), ("remindf", "remindf"), ("timer", "timer"), ("bomb", "bomb")],
             [("time", "time"), ("del", "del"), ("freeze", "freeze")],
+            [("afk_ex", "afk_ex"), ("afk_unex", "afk_unex")],
         ]),
     ],
     2: [
