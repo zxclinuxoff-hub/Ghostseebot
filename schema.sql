@@ -220,3 +220,29 @@ create table if not exists gs_afk_exclusions (
 );
 create index if not exists gs_afk_excl_owner on gs_afk_exclusions (owner_id, created_at desc);
 alter table gs_afk_exclusions enable row level security;
+
+-- ===== подарочная подписка (ссылки) =====
+create table if not exists gs_gifts (
+  code text primary key,
+  buyer_id bigint not null,
+  plan text not null,
+  stars int,
+  charge_id text unique,
+  redeemed_by bigint,
+  redeemed_at timestamptz,
+  created_at timestamptz default now()
+);
+create index if not exists gs_gifts_buyer on gs_gifts (buyer_id, created_at desc);
+alter table gs_gifts enable row level security;
+
+-- ===== донат: произвольная сумма и комментарий (миграция 003) =====
+alter table gs_donations add column if not exists comment text;
+create table if not exists gs_donation_intents (
+  token text primary key,
+  tg_id bigint not null,
+  stars int not null,
+  comment text,
+  created_at timestamptz default now()
+);
+create index if not exists gs_donation_intents_created on gs_donation_intents (created_at);
+alter table gs_donation_intents enable row level security;

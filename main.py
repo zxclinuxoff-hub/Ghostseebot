@@ -80,7 +80,7 @@ from aiohttp import web
 
 from bot.config import cfg
 from bot.handlers import admin, business, extras, payments, start
-from bot.services import scheduler
+from bot.services import biz, scheduler
 from bot.services.gate import GateMiddleware
 from bot.services.logs import audit, is_network_error
 
@@ -89,6 +89,7 @@ for _n in ("httpx", "httpcore"):  # без спама в логах Render
     logging.getLogger(_n).setLevel(logging.WARNING)
 
 from bot.services.premium_emoji import prepare_method
+from bot.services.presence import PresenceMW
 
 
 class _PremiumBot(Bot):
@@ -102,6 +103,8 @@ dp = Dispatcher(storage=MemoryStorage())
 # порядок важен: админка первой (фильтр по ID), дальше остальное
 dp.message.outer_middleware(GateMiddleware())
 dp.callback_query.outer_middleware(GateMiddleware())
+dp.message.outer_middleware(PresenceMW())
+dp.callback_query.outer_middleware(PresenceMW())
 dp.include_routers(admin.router, payments.router, business.router, extras.router, start.router)
 
 _tasks: set = set()
@@ -143,6 +146,9 @@ async def on_startup(bot: Bot):
     t = asyncio.create_task(scheduler.run(bot))
     _tasks.add(t)
     t.add_done_callback(_tasks.discard)
+    t2 = asyncio.create_task(biz.msg_flush_loop())  # пакетная запись сообщений в базу
+    _tasks.add(t2)
+    t2.add_done_callback(_tasks.discard)
     logging.info("GhostSee started (%s)", "webhook" if cfg.webhook_base else "polling")
 
 
