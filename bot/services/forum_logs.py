@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import html
 import logging
+import time
 import uuid
 from datetime import datetime
 
@@ -177,11 +179,17 @@ async def _maybe_date_marker(bot: Bot, thread_id: int) -> None:
     )
 
 
+_sent_ts: collections.deque = collections.deque(maxlen=20000)
+
+
 async def _store_row(**row) -> None:
-    try:
-        await db.insert("gs_forum_msgs", row, upsert="chat_id,msg_id,event", returning=False)
-    except Exception as e:
-        log.warning("forum row insert failed: %s", e)
+    """Сообщения уже лежат в форум-группе — в базу их не дублируем. Считаем только для админки в памяти."""
+    _sent_ts.append(time.time())
+
+
+def sent_last_hour() -> int:
+    cutoff = time.time() - 3600
+    return sum(1 for t in _sent_ts if t >= cutoff)
 
 
 def _media_info(m: Message) -> dict | None:

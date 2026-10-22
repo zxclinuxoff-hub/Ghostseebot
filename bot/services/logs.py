@@ -44,7 +44,14 @@ def is_network_error(e: BaseException) -> bool:
                           asyncio.TimeoutError, ConnectionError)) or type(e).__name__ in names
 
 
+# Обычные события (info) остаются в консоли Render и в базу не пишутся.
+# Ошибки, предупреждения и события оплат/донатов/подарков сохраняются всегда.
+KEEP_IN_DB = {"payment", "donation", "gift_bought", "gift_redeemed"}
+
+
 async def _write(level, event, tg_id, details):
+    if level == "info" and event not in KEEP_IN_DB:
+        return
     try:
         await db.insert("gs_logs", {
             "level": level, "event": event, "tg_id": tg_id, "details": details,

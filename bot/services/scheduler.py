@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from aiogram import Bot
 
 from ..db import db
-from . import biz, gate
+from . import biz, gate, weekly
 from . import users as U
 from .logs import audit, is_network_error
 
@@ -28,6 +28,14 @@ async def _safe(name: str, coro) -> bool:
 
 
 async def run_jobs(bot: Bot):
+    try:
+        await _run_due_jobs(bot)
+    except Exception:
+        biz.set_job_next(0)  # при ошибке проверим на следующем цикле
+        raise
+
+
+async def _run_due_jobs(bot: Bot):
     rows = await db.select("gs_jobs", {"run_at": f"lte.{U.iso(U.now())}", "order": "run_at.asc", "limit": 50})
     for j in rows:
         await db.delete("gs_jobs", {"id": f"eq.{j['id']}"})  # сначала удаляем: не зацикливаемся при ошибке
@@ -45,6 +53,14 @@ async def run_jobs(bot: Bot):
                 await biz.schedule(j["kind"], 10, **{**p, "tries": p.get("tries", 0) + 1})
             else:
                 await audit("warn", "job_failed", None, kind=j["kind"], err=str(e)[:200])
+    if len(rows) == 50:  # могли остаться ещё due-задачи — проверим сразу
+        return biz.set_job_next(0)
+    nxt = await db.select("gs_jobs", {"order": "run_at.asc", "limit": 1})  # ближайшая будущая
+    if nxt:
+        import datetime as dt
+        biz.set_job_next(dt.datetime.fromisoformat(nxt[0]["run_at"].replace("Z", "+00:00")).timestamp())
+    else:
+        biz.set_job_next(time.time() + 300)  # очередь пуста: заглянем через 5 минут на всякий случай
 
 
 async def update_names(bot: Bot):
@@ -121,6 +137,7 @@ async def cleanup():
     await db.delete("temp_messages", {"timestamp": f"lt.{U.iso(n - dt.timedelta(minutes=15))}"})
     await db.delete("gs_canary_events", {"clicked_at": f"lt.{U.iso(n - dt.timedelta(days=90))}"})
     await db.delete("gs_forum_msgs", {"created_at": f"lt.{U.iso(n - dt.timedelta(days=30))}"})
+    await db.delete("gs_donation_intents", {"created_at": f"lt.{U.iso(n - dt.timedelta(days=1))}"})  # неоплаченные счета
 
 
 HEARTBEAT = 0.0  # время последнего цикла — по нему видно, не завис ли планировщик
@@ -128,18 +145,23 @@ HEARTBEAT = 0.0  # время последнего цикла — по нему 
 
 async def run(bot: Bot):
     global HEARTBEAT
-    last_min = last_clean = 0.0
+    last_min = last_clean = last_freeze = 0.0
     delay = 5
     while True:
         HEARTBEAT = time.time()
-        ok = await _safe("jobs", run_jobs(bot))
+        ok = True
+        if time.time() >= biz.job_next():  # пустую очередь не опрашиваем каждые 5 секунд
+            ok = await _safe("jobs", run_jobs(bot))
         delay = 5 if ok else min(delay * 2, 30)  # при проблемах с сетью реже стучимся
         t = time.time()
         if t - last_min >= 60:
             last_min = t
             await _safe("names", update_names(bot))
+            await _safe("weekly", weekly.maybe_send(bot))
             await _safe("expiring", warn_expiring(bot))
             await _safe("expiring3", warn_expiring_3d(bot))
+        if t - last_freeze >= 300:  # полный просмотр пользователей — раз в 5 минут
+            last_freeze = t
             await _safe("unfreeze", end_expired_freezes(bot))
         if t - last_clean >= 900:
             last_clean = t

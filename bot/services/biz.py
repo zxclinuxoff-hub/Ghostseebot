@@ -68,9 +68,21 @@ async def edit(bc, chat_id, mid, text, kb=None):
                      text=text[:4096], parse_mode="HTML", reply_markup=kb_json(kb))
 
 
+_own: dict[tuple, float] = {}  # сообщения, которые отправил сам бот от имени владельца
+
+
+def is_own(bc, chat_id, msg_id) -> bool:
+    return (bc, chat_id, msg_id) in _own
+
+
 async def send(bc, chat_id, text, kb=None, reply_to=None):
-    return await api("sendMessage", business_connection_id=bc, chat_id=chat_id, text=text[:4096], parse_mode="HTML",
-                     reply_markup=kb_json(kb), reply_parameters={"message_id": reply_to} if reply_to else None)
+    r = await api("sendMessage", business_connection_id=bc, chat_id=chat_id, text=text[:4096], parse_mode="HTML",
+                  reply_markup=kb_json(kb), reply_parameters={"message_id": reply_to} if reply_to else None)
+    if isinstance(r, dict) and r.get("message_id"):
+        if len(_own) > 5000:
+            _own.clear()
+        _own[(bc, chat_id, r["message_id"])] = time.time()
+    return r
 
 
 async def delete(bc, ids):
@@ -123,35 +135,95 @@ async def chat_get(bc, chat_id) -> dict:
     if c and time.time() - c[0] < 120:
         return c[1]
     rows = await db.select("gs_chat", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}"})
-    data = rows[0]["data"] if rows else {}
+    data = dict(rows[0]["data"]) if rows else {}
+    if c:  # перечитываем после истечения кэша — временные отметки из памяти не теряем
+        for key in _TIMER_KEYS:
+            if key in c[1]:
+                data[key] = c[1][key]
     _chat[k] = (time.time(), data)
     return data
+
+
+_TIMER_KEYS = {"last_clone", "last_afk", "last_autoreply"}  # временные отметки: не нужны после перезапуска
 
 
 async def chat_set(bc, chat_id, **kw) -> dict:
     data = {**await chat_get(bc, chat_id), **kw}
     _chat[(bc, chat_id)] = (time.time(), data)  # кэш обновляем сразу — действует мгновенно
+    if kw and set(kw) <= _TIMER_KEYS:
+        return data  # только таймер — в базу не пишем, это было бы по записи на каждое сообщение
     await db.insert("gs_chat", {"bc": bc, "chat_id": chat_id, "data": data}, upsert="bc,chat_id", returning=False)
     return data
 
 
 # ---------- кэш сообщений ----------
+# Сообщения копим в памяти и пишем в базу пачкой раз в 0.5 сек.
+# Удалённое сообщение находим и в буфере, поэтому задержка записи не влияет на показ удалённых.
+_msg_buf: dict[tuple, dict] = {}
+MSG_FLUSH_EVERY = 0.5
+MSG_FLUSH_MAX = 300  # больше — пишем сразу, чтобы буфер не рос
+
+
 async def cache_msg(bc, chat_id, mid, owner_id, data: dict):
-    await db.insert("gs_msgs", {"bc": bc, "chat_id": chat_id, "msg_id": mid, "owner_id": owner_id, "data": data},
-                    upsert="bc,chat_id,msg_id", returning=False)
+    _msg_buf[(bc, chat_id, mid)] = {"bc": bc, "chat_id": chat_id, "msg_id": mid, "owner_id": owner_id, "data": data}
+    if len(_msg_buf) >= MSG_FLUSH_MAX:
+        await flush_msgs()
+
+
+async def flush_msgs() -> None:
+    global _msg_buf
+    if not _msg_buf:
+        return
+    rows = list(_msg_buf.values())
+    _msg_buf = {}
+    try:
+        await db.insert("gs_msgs", rows, upsert="bc,chat_id,msg_id", returning=False)
+    except Exception:
+        for r in rows:  # не потеряли: вернём в буфер, попробуем на следующем круге
+            _msg_buf.setdefault((r["bc"], r["chat_id"], r["msg_id"]), r)
+        raise
+
+
+async def msg_flush_loop() -> None:
+    """Фоновая задача: раз в полсекунды отправляет накопленные сообщения."""
+    while True:
+        await asyncio.sleep(MSG_FLUSH_EVERY)
+        try:
+            await flush_msgs()
+        except Exception:
+            pass  # сеть моргнула — повторим в следующем круге
 
 
 async def get_msg(bc, chat_id, mid):
+    row = _msg_buf.get((bc, chat_id, mid))
+    if row:
+        return row["data"]
     rows = await db.select("gs_msgs", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}", "msg_id": f"eq.{mid}"})
     return rows[0]["data"] if rows else None
 
 
 async def drop_msg(bc, chat_id, mid):
+    await flush_msgs()  # сначала дописываем буфер, чтобы удаление не обогнало запись
     await db.delete("gs_msgs", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}", "msg_id": f"eq.{mid}"})
 
 
 # ---------- отложенные задачи ----------
+_JOB_NEXT = 0.0  # когда проверять очередь; 0 — проверить сейчас (например, после перезапуска)
+
+
+def job_next() -> float:
+    return _JOB_NEXT
+
+
+def set_job_next(ts: float) -> None:
+    global _JOB_NEXT
+    _JOB_NEXT = ts
+
+
 async def schedule(kind: str, delay_s: float, **payload):
     import datetime as dt
     await db.insert("gs_jobs", {"run_at": U.iso(U.now() + dt.timedelta(seconds=delay_s)), "kind": kind, "payload": payload},
                     returning=False)
+    ts = time.time() + delay_s
+    if _JOB_NEXT and ts < _JOB_NEXT:  # новая задача раньше текущей — будим планировщик вовремя
+        set_job_next(ts)  # при _JOB_NEXT == 0 уже велено проверить сейчас — не трогаем
