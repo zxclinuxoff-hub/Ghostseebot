@@ -23,7 +23,7 @@ def main_menu(uid: int | None = None) -> M:
     return M(inline_keyboard=[
         *admin_rows,
         [B(text="⭐ Подключить", callback_data="connect")],
-        [B(text="⬆️ Обновить тариф", callback_data="buy")],
+        [B(text="💳 Купить подписку", callback_data="buy")],
         [B(text="⭐ Поддержать разработчика", callback_data="donate")],
         [
             B(text="🧩 Функционал", callback_data="cmds"),
@@ -72,8 +72,17 @@ def buy_kb(u) -> M:
         stars, pct = BP.price_for(u, key)
         label = f"⭐ {p['title']} — {stars}⭐" + (f" (−{pct}%)" if pct else "")
         rows.append([B(text=label, callback_data=f"pay:{key}")])
+    rows.append([B(text="🎁 Подарить подписку", callback_data="gift")])
     rows.append([B(text="🎫 Скидка до 35% — написать в тикет", url=SUPPORT_URL)])
     return back_kb(rows)
+
+
+def gift_kb(u) -> M:
+    rows = []
+    for key, p in PLANS.items():
+        stars, _pct = BP.price_for(u, key)
+        rows.append([B(text=f"🎁 {p['title']} — {stars}⭐", callback_data=f"gpay:{key}")])
+    return back_kb(rows, to="buy", label="⬅️ Назад")
 
 
 def support_kb() -> M:

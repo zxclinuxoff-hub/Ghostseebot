@@ -193,7 +193,7 @@ CMD_INFO = {
     'emoji': '<code>.emoji</code> — эмодзи-строка\n\n<blockquote>Повторяет переданный символ или текст в виде строки. Без аргумента — 👻.\n\nФормат ввода:\n<code>.emoji 🔥</code></blockquote>',
     'help': '<code>.help</code> — справка по командам\n\n<blockquote>Полный список команд приходит одним сообщением в личку.\n\nФормат ввода:\n<code>.help</code></blockquote>',
     'cmds': '<code>.cmds</code> — то же, что <code>.help</code>\n\n<blockquote>Полный список команд приходит в личку.\n\nФормат ввода:\n<code>.cmds</code></blockquote>',
-    'afk': '<code>.afk</code> — AFK\n\n<blockquote>Автоответ, пока тебя нет.\n\nФормат ввода:\n<code>.afk отошёл</code>\nснять: <code>.unafk</code></blockquote>',
+    'afk': '<code>.afk</code> — AFK\n\n<blockquote>Автоответ, пока тебя нет. Если ты в сети (писал или нажимал что-то в Telegram за последние 5 минут), автоответ не отправляется.\n\nФормат ввода:\n<code>.afk отошёл</code>\nснять: <code>.unafk</code></blockquote>',
     'ai': '<code>.ai</code> — нейросеть\n\n<blockquote>Запрос к ИИ (если включён ключ на сервере).\n\nФормат ввода:\n<code>.ai вопрос</code></blockquote>',
     'anim': '<code>.anim</code> — анимация\n\n<blockquote>Показывает короткую emoji-анимацию в чате.\n\nФормат ввода:\n<code>.anim</code></blockquote>',
     'antispam': '<code>.antispam</code> — антиспам\n\n<blockquote>Режет спам-сообщения в чате.\n\nФормат ввода:\n<code>.antispam</code> / <code>.unantispam</code></blockquote>',
