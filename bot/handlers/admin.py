@@ -406,9 +406,10 @@ async def status_text(bot: Bot) -> str:
         from ..services.settings import forum_logging_enabled
         on = await forum_logging_enabled()
         since = U.iso(U.now() - dt.timedelta(hours=1))
-        fwd = await db.count("gs_forum_msgs", {"created_at": f"gt.{since}"})
+        from ..services.forum_logs import sent_last_hour
+        fwd = sent_last_hour()
         if on:
-            row("ok", "Форум-логирование", f"включено, за час записано {fwd}")
+            row("ok", "Форум-логирование", f"включено, за час отправлено в группу {fwd}")
         else:
             row("warn", "Форум-логирование", "выключено вручную")
     except Exception as e:

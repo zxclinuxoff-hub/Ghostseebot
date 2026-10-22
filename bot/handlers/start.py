@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton as B,
 
 from .. import keyboards as K
 from ..config import PLANS, cfg
+from ..services import gifts
 from ..db import db
 from ..services import billing, gate, referrals, roulette
 from ..services import users as U
@@ -160,9 +161,14 @@ async def cmd_start(m: Message, command: CommandObject, bot: Bot):
     if not await gate.allowed(bot, m.from_user.id):
         if args.startswith("promo_"):  # запомним ссылку: активируем сразу после подписки
             await U.set_settings(m.from_user.id, pending_promo=args[6:])
+        if args.startswith("gift_"):  # подарок тоже запоминаем до подписки на канал
+            await U.set_settings(m.from_user.id, pending_gift=args[5:])
         await audit("info", "gate_shown", m.from_user.id)
         return await m.answer(gate.GATE_TEXT, reply_markup=K.channel_kb())
 
+    if args.startswith("gift_"):  # подарочная ссылка: /start gift_КОД
+        await gifts.redeem(bot, m, args[5:], m.from_user.id)
+        return
     if args.startswith("promo_"):  # ссылка-промокод: /start promo_КОД
         await _redeem_and_reply(m, bot, args[6:], m.from_user.id)
         return await referrals.try_credit(bot, m.from_user.id)
@@ -240,7 +246,12 @@ async def cb_check(cb: CallbackQuery, bot: Bot):
         return await cb.answer("Ты ещё не подписан на канал 🙂", show_alert=True)
     await cb.answer("✅ Подписка подтверждена!")
     await referrals.try_credit(bot, cb.from_user.id)
-    pend = ((await U.ensure_user(cb.from_user))[0].get("settings") or {}).get("pending_promo")
+    settings = (await U.ensure_user(cb.from_user))[0].get("settings") or {}
+    pend_gift = settings.get("pending_gift")
+    if pend_gift:  # подарок из ссылки, открытой до подписки на канал
+        await U.set_settings(cb.from_user.id, pending_gift=None)
+        await gifts.redeem(bot, cb.message, pend_gift, cb.from_user.id)
+    pend = settings.get("pending_promo")
     if pend:  # промокод из ссылки, которую открыли до подписки
         await U.set_settings(cb.from_user.id, pending_promo=None)
         await _redeem_and_reply(cb.message, bot, pend, cb.from_user.id)
@@ -429,6 +440,11 @@ async def cb_refs(cb: CallbackQuery):
 
 
 # ---------------- подписка ----------------
+GIFT_TEXT = (f"🎁 <b>Подарить подписку</b>\n{LINE}\n"
+             "Оплатишь звёздами и получишь ссылку. Отправь её другу: он откроет её в боте, "
+             "и подписка «Всё включено» активируется у него. Ссылка одноразовая.")
+
+
 def buy_text() -> str:
     return (f"💳 <b>Подписка «Всё включено»</b>\n{LINE}\n"
             "Удалённые и изменённые сообщения, временные фото и все команды — без ограничений.\n\n"
@@ -442,6 +458,22 @@ async def cb_buy(cb: CallbackQuery):
     u, _ = await U.ensure_user(cb.from_user)
     await cb.answer()
     await show(cb, buy_text(), K.buy_kb(u))
+
+
+@router.callback_query(F.data == "gift")
+async def cb_gift(cb: CallbackQuery):
+    u, _ = await U.ensure_user(cb.from_user)
+    await cb.answer()
+    await show(cb, GIFT_TEXT, K.gift_kb(u))
+
+
+@router.callback_query(F.data.startswith("gpay:"))
+async def cb_gift_pay(cb: CallbackQuery, bot: Bot):
+    plan = cb.data.split(":")[1]
+    u, _ = await U.ensure_user(cb.from_user)
+    await cb.answer()
+    if plan in PLANS and not u.get("banned"):
+        await gifts.send_invoice(bot, cb.from_user.id, u, plan)
 
 
 @router.callback_query(F.data.startswith("pay:"))

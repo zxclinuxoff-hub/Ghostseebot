@@ -30,7 +30,6 @@ DB_FAIL = "⚠️ База временно недоступна, попробу
 # Расширяемый реестр: чтобы добавить настройку другой команды, достаточно новой записи и своих обработчиков.
 CMD_SETTINGS: dict[str, str] = {"afk": "🌙 Настройка .afk"}
 
-DONATE_LABELS = {1: "⭐ 1 звезда", 2: "⭐ 2 звезды", 5: "⭐ 5 звёзд", 10: "⭐ 10 звёзд"}
 
 
 class AfkAdd(StatesGroup):
@@ -50,36 +49,108 @@ async def _deny(cb: CallbackQuery) -> None:
 
 
 # ---------------- поддержка разработчика ----------------
+class DonateFlow(StatesGroup):
+    amount = State()
+    comment = State()
+
+
 DONATE_TEXT = (f"🖤 <b>Поддержать разработчика</b>\n{LINE}\n"
-               "Если тебе нравится GhostSeeBot и моя работа над проектом, ты можешь поддержать его развитие "
-               "звёздами Telegram. Спасибо за поддержку!")
+               "Если тебе нравится GhostSeeBot и моя работа над проектом, можешь поддержать его развитие "
+               "звёздами Telegram.\n\n"
+               f"Напиши сумму в звёздах ⭐ одним сообщением (от {DR.MIN_STARS}). Спасибо за поддержку!")
 
 
-def donate_kb() -> M:
-    rows = [[B(text=DONATE_LABELS[n], callback_data=f"donate:{n}")] for n in DR.DONATE_AMOUNTS]
-    return K.back_kb(rows, label="⬅️ Назад")
+def _comment_text(stars: int) -> str:
+    return (f"💬 Сумма: <b>{stars}⭐</b>\n"
+            f"Напиши комментарий к донату (до {DR.COMMENT_MAX} символов) или нажми «Без комментария».")
+
+
+def donate_comment_kb() -> M:
+    return M(inline_keyboard=[
+        [B(text="➡️ Без комментария", callback_data="donate:skip")],
+        [B(text="❌ Отмена", callback_data="donate:cancel")],
+    ])
 
 
 @router.callback_query(F.data == "donate")
-async def cb_donate(cb: CallbackQuery):
+async def cb_donate(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(DonateFlow.amount)
     await cb.answer()
-    await show(cb, DONATE_TEXT, donate_kb())
+    await show(cb, DONATE_TEXT, K.back_kb(label="⬅️ Назад"))
+
+
+async def _ask_comment(state: FSMContext, stars: int) -> None:
+    await state.update_data(stars=stars)
+    await state.set_state(DonateFlow.comment)
+
+
+@router.message(DonateFlow.amount)
+async def msg_donate_amount(m: Message, state: FSMContext):
+    if (m.text or "").startswith("/"):  # команда — выходим из режима доната
+        await state.clear()
+        return await m.answer("Донат отменён. Открыть меню: /menu")
+    stars = DR.parse_amount(m.text)
+    if stars is None:
+        return await m.answer(f"❗ Нужна сумма в звёздах от {DR.MIN_STARS} — только цифры. Пришли ещё раз.")
+    await _ask_comment(state, stars)
+    await m.answer(_comment_text(stars), reply_markup=donate_comment_kb())
+
+
+async def _send_donation_invoice(bot: Bot, state: FSMContext, uid: int, chat_id: int, comment: str | None):
+    data = await state.get_data()
+    stars = data.get("stars")
+    await state.clear()
+    if not DR.valid_amount(stars):
+        return None  # сумма потерялась — пусть пользователь начнёт заново
+    try:
+        await donate.send_invoice(bot, chat_id, uid, stars, comment)
+    except Exception as e:
+        await audit("error", "donate_invoice_failed", uid, err=str(e)[:200])
+        return "⚠️ Не удалось создать счёт, попробуй позже"
+    return "Счёт отправлен в чат с ботом ✅"
+
+
+@router.message(DonateFlow.comment)
+async def msg_donate_comment(m: Message, state: FSMContext, bot: Bot):
+    if (m.text or "").startswith("/"):
+        await state.clear()
+        return await m.answer("Донат отменён. Открыть меню: /menu")
+    comment = DR.clean_comment(m.text)
+    result = await _send_donation_invoice(bot, state, m.from_user.id, m.chat.id, comment)
+    if result is None:
+        return await m.answer("Сначала укажи сумму: открой «Поддержать разработчика».")
+    await m.answer(result)
 
 
 @router.callback_query(F.data.regexp(r"^donate:\d+$"))
-async def cb_donate_amount(cb: CallbackQuery, bot: Bot):
+async def cb_donate_old(cb: CallbackQuery, state: FSMContext):
+    """Старые кнопки с фиксированными суммами (если остались в чате) — ведут к тому же шагу с комментарием."""
     try:
         stars = int(cb.data.split(":")[1])
     except ValueError:
         return await cb.answer()
-    if stars not in DR.DONATE_AMOUNTS:
+    if not DR.valid_amount(stars):
         return await cb.answer("Такой суммы нет", show_alert=True)
-    try:
-        await donate.send_invoice(bot, cb.from_user.id, stars)
-    except Exception as e:
-        await audit("error", "donate_invoice_failed", cb.from_user.id, err=str(e)[:200])
-        return await cb.answer("Не удалось создать счёт, попробуй позже", show_alert=True)
-    await cb.answer("Счёт отправлен в чат с ботом")
+    await _ask_comment(state, stars)
+    await cb.answer()
+    await cb.message.answer(_comment_text(stars), reply_markup=donate_comment_kb())
+
+
+@router.callback_query(F.data == "donate:skip")
+async def cb_donate_skip(cb: CallbackQuery, state: FSMContext, bot: Bot):
+    result = await _send_donation_invoice(bot, state, cb.from_user.id, cb.from_user.id, None)
+    if result is None:
+        return await cb.answer("Сначала укажи сумму", show_alert=True)
+    await cb.answer()
+    await cb.message.answer(result)
+
+
+@router.callback_query(F.data == "donate:cancel")
+async def cb_donate_cancel(cb: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await cb.answer("Отменено")
+    await show(cb, "Донат отменён.", K.back_kb(label="⬅️ Назад"))
 
 
 # ---------------- настройка команд ----------------

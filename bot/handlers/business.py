@@ -15,7 +15,7 @@ from aiogram.types import BufferedInputFile, BusinessConnection, BusinessMessage
 from ..commands import engine
 from ..commands import tools  # noqa: F401  (регистрирует команды)
 from ..keyboards import buy_shortcut, channel_kb
-from ..services import afk_excl, biz, gate
+from ..services import afk_excl, biz, gate, presence
 from ..services import users as U
 from ..services.logs import audit, bg
 from ..services.forum_logs import log_business_message, log_deleted
@@ -313,6 +313,8 @@ async def on_message(m: Message, bot: Bot):
     active = member and U.is_active(u)
     chat = m.chat.id
     owner = m.from_user.id == conn["owner_id"]
+    if owner and not biz.is_own(bc, chat, m.message_id):
+        presence.touch(conn["owner_id"])  # владелец пишет сам — он в сети
     text = (m.text or "").strip()
     snap = {"name": name_of(m.from_user), "text": m.text, "caption": m.caption, "media": media_of(m), "out": owner, "ts": time.time()}
 
@@ -438,6 +440,8 @@ async def on_message(m: Message, bot: Bot):
         return await biz.send(bc, chat, esc(m.text))
     afk = (u.get("settings") or {}).get("afk")
     if afk and now - st.get("last_afk", 0) > 180:
+        if presence.is_online(conn["owner_id"]):
+            return  # владелец в сети — автоответ не нужен
         if await afk_excl.is_excluded(conn["owner_id"], m.from_user.id):
             return  # собеседник в исключениях — ни ответа, ни повторного таймера
         await biz.chat_set(bc, chat, last_afk=now)
