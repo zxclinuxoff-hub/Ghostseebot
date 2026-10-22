@@ -78,8 +78,22 @@ async def update_names(bot: Bot):
             await biz.set_name(s["time_bc"], f"{s['time_first']} | {hhmm}"[:64], s.get("time_last") or None)
             await U.set_settings(u["tg_id"], time_cur=hhmm)
         except Exception as e:
-            if not is_network_error(e):
-                await audit("warn", "time_name_failed", u["tg_id"], err=str(e)[:200])
+            if is_network_error(e):
+                continue
+            msg = str(e)
+            if "BUSINESS_CONNECTION_INVALID" in msg or "BOT_ACCESS_FORBIDDEN" in msg:
+                # бот потерял доступ к аккаунту: выключаем функцию, чтобы не долбить Telegram каждую минуту
+                await U.set_settings(u["tg_id"], time_on=False)
+                await audit("warn", "time_name_disabled", u["tg_id"], err=msg[:150])
+                try:
+                    await bot.send_message(
+                        u["tg_id"],
+                        "⏰ <b>Время в имени выключено</b>: бот потерял доступ к аккаунту. "
+                        "Подключи бота заново в настройках Telegram Business и включи функцию снова.")
+                except Exception:
+                    pass
+            else:
+                await audit("warn", "time_name_failed", u["tg_id"], err=msg[:200])
 
 
 async def warn_expiring(bot: Bot):
