@@ -63,6 +63,9 @@ async def _run_due_jobs(bot: Bot):
         biz.set_job_next(time.time() + 300)  # очередь пуста: заглянем через 5 минут на всякий случай
 
 
+_time_cur: dict[int, str] = {}  # последнее выставленное время в имени по пользователю
+
+
 async def update_names(bot: Bot):
     for u in await db.select("gs_users", {"settings->>time_on": "eq.true"}):
         s = u["settings"]
@@ -72,11 +75,11 @@ async def update_names(bot: Bot):
             hhmm = dt.datetime.now(ZoneInfo(s.get("time_tz", "Europe/Moscow"))).strftime("%H:%M")
         except Exception:
             continue
-        if s.get("time_cur") == hhmm:
-            continue
+        if _time_cur.get(u["tg_id"], s.get("time_cur")) == hhmm:
+            continue  # имя уже такое — не трогаем Telegram и базу
         try:
             await biz.set_name(s["time_bc"], f"{s['time_first']} | {hhmm}"[:64], s.get("time_last") or None)
-            await U.set_settings(u["tg_id"], time_cur=hhmm)
+            _time_cur[u["tg_id"]] = hhmm  # в память, а не в базу: раньше была запись на каждого пользователя каждую минуту
         except Exception as e:
             if is_network_error(e):
                 continue
@@ -172,10 +175,10 @@ async def run(bot: Bot):
             last_min = t
             await _safe("names", update_names(bot))
             await _safe("weekly", weekly.maybe_send(bot))
+        if t - last_freeze >= 300:  # раз в 5 минут: истечение заморозок и предупреждения о подписке
+            last_freeze = t
             await _safe("expiring", warn_expiring(bot))
             await _safe("expiring3", warn_expiring_3d(bot))
-        if t - last_freeze >= 300:  # полный просмотр пользователей — раз в 5 минут
-            last_freeze = t
             await _safe("unfreeze", end_expired_freezes(bot))
         if t - last_clean >= 900:
             last_clean = t

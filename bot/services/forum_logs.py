@@ -71,6 +71,7 @@ def _topic_key(owner_id: int, peer_id: int) -> str:
 
 
 async def _forget_topic(key: str) -> None:
+    _thread_cache.pop(key, None)  # тема удалена — из памяти тоже убираем
     """Забываем привязку пары: при следующем сообщении тема создастся заново."""
     try:
         await db.delete("gs_topics", {"pair_key": f"eq.{key}"})
@@ -127,18 +128,25 @@ async def _send_with_retry(coro_func, *args, **kwargs):
     return None
 
 
+_thread_cache: dict[str, int] = {}
+
+
 async def _topic(bot: Bot, m: Message, conn: dict) -> int | None:
     owner_id = int(conn["owner_id"])
     peer_id = m.chat.id
     key = _topic_key(owner_id, peer_id)
+    if key in _thread_cache:  # тема уже известна — в базу не ходим
+        return _thread_cache[key]
     rows = await db.select("gs_topics", {"pair_key": f"eq.{key}"})
     if rows and rows[0].get("thread_id"):
+        _thread_cache[key] = int(rows[0]["thread_id"])
         return int(rows[0]["thread_id"])
 
     lock = _topic_locks.setdefault(key, asyncio.Lock())
     async with lock:
         rows = await db.select("gs_topics", {"pair_key": f"eq.{key}"})
         if rows and rows[0].get("thread_id"):
+            _thread_cache[key] = int(rows[0]["thread_id"])
             return int(rows[0]["thread_id"])
 
         peer = _who(m.chat.username, m.chat.first_name, peer_id)
@@ -157,6 +165,7 @@ async def _topic(bot: Bot, m: Message, conn: dict) -> int | None:
             "pair_key": key, "thread_id": thread_id, "owner_id": owner_id, "peer_id": peer_id,
             "name": name,
         }, upsert="pair_key", returning=False)
+        _thread_cache[key] = int(thread_id)
 
         await _send_with_retry(
             bot.send_message, LOG_CHAT_ID,
@@ -334,11 +343,6 @@ async def log_business_message(bot: Bot, m: Message, conn: dict, event: str = "m
                 header + "\n<i>Тип сообщения не поддержан для копирования</i>",
                 message_thread_id=thread_id)
 
-        try:
-            await db.update("gs_topics", {"pair_key": f"eq.{_topic_key(conn['owner_id'], m.chat.id)}"},
-                            {"last_msg_at": datetime.utcnow().isoformat()})
-        except Exception:
-            pass
 
         await _store_row(
             chat_id=m.chat.id, msg_id=m.message_id, thread_id=thread_id,

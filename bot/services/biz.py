@@ -157,54 +157,60 @@ async def chat_set(bc, chat_id, **kw) -> dict:
 
 
 # ---------- кэш сообщений ----------
-# Сообщения копим в памяти и пишем в базу пачкой раз в 0.5 сек.
-# Удалённое сообщение находим и в буфере, поэтому задержка записи не влияет на показ удалённых.
-_msg_buf: dict[tuple, dict] = {}
-MSG_FLUSH_EVERY = 0.5
-MSG_FLUSH_MAX = 300  # больше — пишем сразу, чтобы буфер не рос
+# Сообщения держим в памяти бота на MSG_TTL секунд. В Supabase их не пишем:
+# это главный источник запросов (каждое сообщение = запрос). Удалённое сообщение находим в памяти.
+# Минус: после перезапуска бота история сообщений обнуляется.
+MSG_TTL = 2 * 3600
+MSG_MAX = 20000
+MSG_DB = False  # True — вернуть запись в gs_msgs (тогда расходуются запросы к Supabase)
+_msg_mem: dict[tuple, tuple[float, dict]] = {}
+
+
+def _prune(now: float) -> None:
+    if len(_msg_mem) < MSG_MAX:
+        return
+    cutoff = now - MSG_TTL
+    for k in [k for k, (ts, _) in _msg_mem.items() if ts < cutoff]:
+        _msg_mem.pop(k, None)
+    if len(_msg_mem) >= MSG_MAX:  # совсем переполнено — выкидываем самые старые
+        for k in list(_msg_mem)[: MSG_MAX // 2]:
+            _msg_mem.pop(k, None)
 
 
 async def cache_msg(bc, chat_id, mid, owner_id, data: dict):
-    _msg_buf[(bc, chat_id, mid)] = {"bc": bc, "chat_id": chat_id, "msg_id": mid, "owner_id": owner_id, "data": data}
-    if len(_msg_buf) >= MSG_FLUSH_MAX:
-        await flush_msgs()
+    now = time.time()
+    _msg_mem[(bc, chat_id, mid)] = (now, data)
+    _prune(now)
+    if MSG_DB:
+        await db.insert("gs_msgs", {"bc": bc, "chat_id": chat_id, "msg_id": mid, "owner_id": owner_id, "data": data},
+                        upsert="bc,chat_id,msg_id", returning=False)
 
 
 async def flush_msgs() -> None:
-    global _msg_buf
-    if not _msg_buf:
-        return
-    rows = list(_msg_buf.values())
-    _msg_buf = {}
-    try:
-        await db.insert("gs_msgs", rows, upsert="bc,chat_id,msg_id", returning=False)
-    except Exception:
-        for r in rows:  # не потеряли: вернём в буфер, попробуем на следующем круге
-            _msg_buf.setdefault((r["bc"], r["chat_id"], r["msg_id"]), r)
-        raise
+    """Совместимость: при MSG_DB=False писать нечего."""
+    return None
 
 
 async def msg_flush_loop() -> None:
-    """Фоновая задача: раз в полсекунды отправляет накопленные сообщения."""
+    """Совместимость со старым запуском: ничего не делает, если запись в базу выключена."""
     while True:
-        await asyncio.sleep(MSG_FLUSH_EVERY)
-        try:
-            await flush_msgs()
-        except Exception:
-            pass  # сеть моргнула — повторим в следующем круге
+        await asyncio.sleep(3600)
 
 
 async def get_msg(bc, chat_id, mid):
-    row = _msg_buf.get((bc, chat_id, mid))
-    if row:
-        return row["data"]
+    hit = _msg_mem.get((bc, chat_id, mid))
+    if hit and time.time() - hit[0] < MSG_TTL:
+        return hit[1]
+    if not MSG_DB:
+        return None
     rows = await db.select("gs_msgs", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}", "msg_id": f"eq.{mid}"})
     return rows[0]["data"] if rows else None
 
 
 async def drop_msg(bc, chat_id, mid):
-    await flush_msgs()  # сначала дописываем буфер, чтобы удаление не обогнало запись
-    await db.delete("gs_msgs", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}", "msg_id": f"eq.{mid}"})
+    _msg_mem.pop((bc, chat_id, mid), None)
+    if MSG_DB:
+        await db.delete("gs_msgs", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}", "msg_id": f"eq.{mid}"})
 
 
 # ---------- отложенные задачи ----------
