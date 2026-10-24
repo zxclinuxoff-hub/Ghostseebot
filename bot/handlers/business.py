@@ -364,7 +364,8 @@ async def on_message(m: Message, bot: Bot):
         bg(biz.cache_msg(bc, chat, m.message_id, conn["owner_id"], snap))
         st_o = await biz.chat_get(bc, chat)
         sec = st_o.get("bchat")
-        if sec:
+        # ответ на медиа не удаляем по таймеру: это запрос на сохранение, а не обычное сообщение
+        if sec and not (m.reply_to_message and media_of(m.reply_to_message)):
             await biz.schedule("del", sec, bc=bc, ids=[m.message_id])
         if text.startswith((".", "/")):
             ran = await engine.run(bot, m, conn, u)
