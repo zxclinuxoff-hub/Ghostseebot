@@ -146,9 +146,6 @@ async def on_startup(bot: Bot):
     t = asyncio.create_task(scheduler.run(bot))
     _tasks.add(t)
     t.add_done_callback(_tasks.discard)
-    t2 = asyncio.create_task(biz.msg_flush_loop())  # пакетная запись сообщений в базу
-    _tasks.add(t2)
-    t2.add_done_callback(_tasks.discard)
     logging.info("GhostSee started (%s)", "webhook" if cfg.webhook_base else "polling")
 
 
