@@ -150,7 +150,25 @@ async def on_startup(bot: Bot):
 
 
 async def health(_request):
+    # Liveness only: confirms that the Render web process is alive.
     return web.Response(text="ok")
+
+
+async def db_health(request):
+    # Readiness diagnostic: verifies actual authenticated access to Supabase.
+    from bot.db import db
+    from bot.db import DBError
+    try:
+        result = await db.healthcheck()
+        return web.json_response({"status": "ok", "supabase": result})
+    except Exception as exc:
+        # Do not return credentials or request headers.
+        logging.error("Supabase healthcheck failed: %s: %s", type(exc).__name__, str(exc)[:240])
+        return web.json_response(
+            {"status": "error", "error_type": type(exc).__name__,
+             "detail": str(exc)[:240]},
+            status=503,
+        )
 
 
 async def canary_hit(request):
@@ -180,6 +198,7 @@ def main():
     if cfg.webhook_base:
         app = web.Application()
         app.router.add_get("/health", health)
+        app.router.add_get("/health/db", db_health)
         app.router.add_get("/", health)
         app.router.add_get("/canary/{token}", canary_hit)
         SimpleRequestHandler(dp, bot, secret_token=cfg.webhook_secret or None).register(app, path="/webhook")
