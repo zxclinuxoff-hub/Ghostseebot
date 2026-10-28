@@ -48,7 +48,21 @@ class Supabase:
             if r.status_code >= 400:
                 raise DBError(f"{method} {table}: {r.status_code} {r.text[:300]}")
             return r
-        raise DBNetworkError(f"{method} {table}: {type(last).__name__ if last else 'ошибка'} (сеть/таймаут)")
+        # Preserve the underlying transport detail: ConnectTimeout alone is not enough
+        # to distinguish an unreachable host, TLS/connect failure, or DNS issue.
+        detail = str(last)[:240] if last else "нет подробностей"
+        raise DBNetworkError(
+            f"{method} {table}: {type(last).__name__ if last else 'ошибка'} "
+            f"(сеть/таймаут; {detail})"
+        ) from last
+
+    async def healthcheck(self):
+        """Проверяет реальное чтение таблицы Supabase с текущими URL/ключом."""
+        r = await self._req(
+            "GET", "gs_users",
+            params={"select": "tg_id", "limit": "1"},
+        )
+        return {"ok": True, "status": r.status_code}
 
     async def select(self, table, params=None):
         return (await self._req("GET", table, params={"select": "*", **(params or {})})).json()
