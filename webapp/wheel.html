@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Колесо фортуны</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#14101c;--card:#1e1829;--line:#2d2540;--ac:#8b5cf6;--ac2:#c4b5fd;--tx:#ece8f5;--mu:#9a93a8;--gold:#f5c84b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:radial-gradient(120% 70% at 50% 0,#271d3d 0,var(--bg) 60%);color:var(--tx);font:16px/1.4 -apple-system,system-ui,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 16px calc(20px + env(safe-area-inset-bottom));text-align:center}
+h1{font-size:22px;margin:18px 0 4px}.sub{color:var(--mu);font-size:13px;margin-bottom:14px}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:13px}
+.vip{color:var(--gold);border-color:#5b4a1e}
+.wrap{position:relative;width:min(88vw,340px);aspect-ratio:1;margin:8px auto 18px}
+.wrap:before{content:"";position:absolute;inset:-8px;border-radius:50%;background:conic-gradient(from 0,#6d3df0,#2a1f45,#a78bfa,#2a1f45,#6d3df0);filter:blur(10px);opacity:.55}
+canvas{position:relative;width:100%;height:100%;border-radius:50%;border:4px solid #3a2d57;transition:transform 5.2s cubic-bezier(.12,.72,.08,1)}
+.ptr{position:absolute;top:-12px;left:50%;transform:translateX(-50%);z-index:3;width:0;height:0;border:14px solid transparent;border-top:26px solid var(--gold);border-bottom:0;filter:drop-shadow(0 2px 4px #000a)}
+.hub{position:absolute;z-index:2;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:radial-gradient(#3a2d57,#1b1428);border:3px solid var(--ac2);display:grid;place-items:center;font-size:22px}
+button{font:600 16px inherit;font-family:inherit;border:0;border-radius:14px;padding:14px 18px;color:#fff;width:100%;max-width:340px;margin:5px auto;display:block;cursor:pointer}
+.main{background:linear-gradient(135deg,#7c4dff,#9d6bff);box-shadow:0 8px 24px #7c4dff55}
+.free{background:#2c8a5a}.ghost{background:var(--card);border:1px solid var(--line);color:var(--ac2)}
+button:disabled{opacity:.45}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:flex-end;justify-content:center;z-index:9}
+.modal.on{display:flex}.sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:420px;max-height:80vh;overflow:auto;text-align:left}
+.row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
+.packs{display:flex;gap:8px;justify-content:center;max-width:340px;margin:6px auto}.packs button{margin:0;padding:12px 6px;font-size:14px}
+.feed{max-width:340px;margin:18px auto 0;text-align:left;font-size:13px;color:var(--mu)}.feed div{padding:6px 0;border-bottom:1px solid var(--line)}
+.big{font-size:44px;text-align:center}.res{white-space:pre-line;text-align:center;font-size:18px;margin:8px 0 16px}
+</style></head><body>
+<h1>🎡 Колесо фортуны</h1>
+<div class="sub">1 прокрут = <span id="price">1</span> ⭐ · шанс считает сервер</div>
+<div class="chips"><div class="chip">🔹 <b id="sh">0</b>/<span id="need">10</span></div><div class="chip">🔥 <b id="st">0</b>/<span id="stn">7</span></div><div class="chip">Сегодня: <b id="left">50</b></div><div class="chip vip" id="vip" hidden>👻 VIP</div></div>
+<div class="wrap"><div class="ptr"></div><div class="hub">✦</div><canvas id="c" width="680" height="680"></canvas></div>
+<button class="main" id="spin">Крутить · 1 ⭐</button>
+<button class="free" id="fr" hidden></button>
+<button class="free" id="cr" hidden></button>
+<div class="packs" id="packs"></div>
+<button class="ghost" id="odds">📊 Шансы</button>
+<div class="feed" id="feed"></div>
+<div class="modal" id="m"><div class="sheet" id="sheet"></div></div>
+<script>
+const tg=window.Telegram.WebApp;tg.ready();tg.expand();try{tg.setHeaderColor('#14101c');tg.setBackgroundColor('#14101c')}catch(e){}
+const $=id=>document.getElementById(id),esc=t=>String(t).replace(/</g,'&lt;');let S=null,rot=0,busy=false;
+async function api(n,b={}){const r=await fetch('/api/wheel/'+n,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,...b})});if(!r.ok)throw new Error(await r.text()||'Ошибка');return r.json()}
+function draw(){const c=$('c'),x=c.getContext('2d'),n=S.prizes.length,R=340,a=2*Math.PI/n,cols=['#3b2a66','#2a1f45'];
+S.prizes.forEach((p,i)=>{const s=-Math.PI/2+i*a;x.beginPath();x.moveTo(R,R);x.arc(R,R,R-6,s,s+a);x.closePath();x.fillStyle=p.code=='bear'||p.code=='d30'?'#5a3f12':cols[i%2];x.fill();x.strokeStyle='#4a3a70';x.lineWidth=3;x.stroke();
+x.save();x.translate(R,R);x.rotate(s+a/2);x.textAlign='center';x.fillStyle='#ece8f5';x.font='54px sans-serif';x.fillText(p.icon,235,18);x.font='bold 22px sans-serif';x.fillStyle='#c4b5fd';x.fillText(p.name.length>11?p.name.slice(0,11)+'…':p.name,150,10);x.restore()})}
+function ago(s){return s<90?'только что':s<3600?Math.round(s/60)+' мин назад':s<86400?Math.round(s/3600)+' ч назад':Math.round(s/86400)+' дн назад'}
+function closeM(){$('m').classList.remove('on')}
+function show(h){$('sheet').innerHTML=h;$('m').classList.add('on')}
+function ui(){$('price').textContent=S.price;$('sh').textContent=S.shards;$('need').textContent=S.need;$('left').textContent=S.left;$('st').textContent=S.streak;$('stn').textContent=S.streak_need;
+const v=S.vip_until&&new Date(S.vip_until)>new Date();$('vip').hidden=!v;
+$('fr').hidden=S.bonus<=0;$('fr').textContent='🎁 Бесплатный прокрут ×'+S.bonus;$('fr').disabled=busy;
+$('cr').hidden=S.credits<=0;$('cr').textContent='🎟 Купленный прокрут ×'+S.credits;$('cr').disabled=busy||S.left<=0;
+$('spin').disabled=busy||S.left<=0;$('spin').textContent=S.left<=0?'Лимит на сегодня':'Крутить · '+S.price+' ⭐';
+$('packs').innerHTML=S.packs.map(p=>'<button class="ghost" '+(busy?'disabled':'')+' data-n="'+p.n+'">'+p.n+' прокрутов · '+p.stars+' ⭐</button>').join('');
+$('packs').querySelectorAll('button').forEach(b=>b.onclick=()=>pay(+b.dataset.n));
+$('feed').innerHTML=S.feed.length?'<b style="color:#c4b5fd">🏆 Недавние выигрыши</b>'+S.feed.map(f=>'<div>'+f.icon+' Игрок выиграл '+esc(f.name)+' · '+ago(f.ago)+'</div>').join(''):''}
+async function load(){S=await api('state');draw();ui();if(S.streak_gift){S.streak_gift=false;show('<div class="big">🔥</div><div class="res">'+S.streak_need+' дней подряд!\n+1 бесплатный прокрут</div><button class="main" onclick="closeM()">Отлично</button>')}}
+$('m').onclick=e=>{if(e.target.id=='m')closeM()}
+function land(res){const i=S.prizes.findIndex(p=>p.code==res.prize),w=360/S.prizes.length,j=(Math.random()-.5)*w*.6;
+rot=rot-(rot%360)+360*6-(i+.5)*w+j;$('c').style.transform='rotate('+rot+'deg)';
+return new Promise(r=>setTimeout(r,5400)).then(async()=>{busy=false;await load();tg.HapticFeedback&&tg.HapticFeedback.notificationOccurred('success');
+show('<div class="big">'+S.prizes[i].icon+'</div><div class="res">'+esc(res.text)+'</div><button class="main" onclick="closeM()">Отлично</button>')})}
+async function err(e){busy=false;ui();show('<div class="res">'+esc(e.message||e)+'</div><button class="ghost" onclick="closeM()">Закрыть</button>')}
+async function run(kind){if(busy)return;busy=true;ui();try{const r=await api(kind);if(!r||r.error)throw new Error(r&&r.error||'Ошибка');S.last_id=r.id;land(r)}catch(e){err(e)}}
+async function pay(n){if(busy)return;busy=true;ui();try{const r=await api('invoice',{pack:n});if(r.error)throw new Error(r.error);
+tg.openInvoice(r.link,async st=>{if(st!=='paid'){busy=false;ui();return}
+for(let k=0;k<15;k++){const l=await api('last',{after:S.last_id});if(l.found){S.last_id=l.id;
+if(l.prize.startsWith('pack')){busy=false;await load();return show('<div class="big">🎟</div><div class="res">'+esc(l.text)+'</div><button class="main" onclick="closeM()">Отлично</button>')}
+return land(l)}await new Promise(r=>setTimeout(r,1000))}
+busy=false;await load();show('<div class="res">Платёж прошёл, результат придёт сообщением в бота.</div>')})}catch(e){err(e)}}
+$('spin').onclick=()=>pay(1);$('fr').onclick=()=>run('free');$('cr').onclick=()=>run('credit');
+$('odds').onclick=()=>show('<h3 style="margin:0 0 8px">📊 Шансы (за один прокрут)</h3>'+S.prizes.map(p=>'<div class="row"><span>'+p.icon+' '+p.name+'</span><b>'+p.p+'%</b></div>').join('')+'<p style="color:#9a93a8;font-size:13px">10 осколков = +3 дня. Заходи '+S.streak_need+' дней подряд: +1 бесплатный прокрут. Друг в боте: +1 прокрут. Секторы на колесе равные, реальные шансы только в этом списке. Скидки действуют 2,5 часа. Мишку выдаёт администратор вручную.</p><button class="ghost" onclick="closeM()">Закрыть</button>')
+load().catch(err)
+</script></body></html>
