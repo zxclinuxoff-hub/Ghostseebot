@@ -80,7 +80,7 @@ from aiohttp import web
 
 from bot.config import cfg
 from bot.handlers import admin, business, extras, payments, start
-from bot.services import biz, scheduler
+from bot.services import biz, scheduler, wheel
 from bot.services.gate import GateMiddleware
 from bot.services.logs import audit, is_network_error
 
@@ -201,6 +201,7 @@ def main():
         app.router.add_get("/health/db", db_health)
         app.router.add_get("/", health)
         app.router.add_get("/canary/{token}", canary_hit)
+        wheel.setup(app, bot)
         SimpleRequestHandler(dp, bot, secret_token=cfg.webhook_secret or None).register(app, path="/webhook")
         setup_application(app, dp, bot=bot)
         web.run_app(app, host="0.0.0.0", port=cfg.port, access_log=None)
