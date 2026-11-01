@@ -29,9 +29,12 @@ def fmt_dt(s) -> str:
     return d.astimezone(MSK).strftime("%d.%m.%Y %H:%M") if d else "—"
 
 
+USER_CACHE_TTL = 300  # было 60 с; правки через бота сбрасывают кэш сразу, ручные правки в БД видны до 5 минут
+
+
 async def get_user(uid: int, fresh: bool = False):
     c = _cache.get(uid)
-    if c and not fresh and time.time() - c[0] < 60:
+    if c and not fresh and time.time() - c[0] < USER_CACHE_TTL:
         return c[1]
     rows = await db.select("gs_users", {"tg_id": f"eq.{uid}"})
     u = rows[0] if rows else None

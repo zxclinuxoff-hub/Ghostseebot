@@ -132,7 +132,7 @@ _chat: dict[tuple, tuple[float, dict]] = {}
 async def chat_get(bc, chat_id) -> dict:
     k = (bc, chat_id)
     c = _chat.get(k)
-    if c and time.time() - c[0] < 120:
+    if c and time.time() - c[0] < 600:
         return c[1]
     rows = await db.select("gs_chat", {"bc": f"eq.{bc}", "chat_id": f"eq.{chat_id}"})
     data = dict(rows[0]["data"]) if rows else {}

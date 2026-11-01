@@ -6,7 +6,7 @@ import time
 from ..db import db
 
 _cache: dict[str, tuple[float, object]] = {}
-_TTL = 10.0
+_TTL = 600.0  # было 10 с: чтение gs_settings шло почти постоянно (≈8 000 запросов/сутки)
 
 
 async def get(key: str, default=None):

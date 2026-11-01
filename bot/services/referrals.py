@@ -3,6 +3,7 @@ from aiogram import Bot
 from ..config import cfg
 from ..db import db
 from . import users as U
+from . import wheel as W
 from .logs import audit
 
 
@@ -58,9 +59,17 @@ async def try_credit(bot: Bot, referred_id: int) -> str:
         await db.update("gs_referrals", {"referred_id": f"eq.{referred_id}"}, {"bonus_days": bonus})
         await U.grant(referrer, bonus)
     await audit("info", "referral_credited", referrer, referred=referred_id, n=n, bonus=bonus)
+    spin = False
+    try:
+        await W.add_bonus(referrer, 1)
+        spin = True
+    except Exception as e:
+        await audit("warn", "referral_spin_failed", referrer, err=str(e)[:200])
     try:
         txt = f"👥 Новый реферал подтверждён! Всего: <b>{n}</b>."
         txt += f"\n🎁 Бонус: <b>+{bonus} дн.</b> подписки" if bonus else "\nДо следующего бонуса ещё немного 😉"
+        if spin:
+            txt += "\n🎡 +1 бесплатный прокрут колеса фортуны"
         await bot.send_message(referrer, txt)
     except Exception:
         pass

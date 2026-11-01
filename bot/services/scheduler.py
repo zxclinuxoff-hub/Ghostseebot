@@ -128,9 +128,15 @@ async def warn_expiring_3d(bot: Bot):
 
 
 async def end_expired_freezes(bot: Bot):
-    # PostgREST-фильтр по jsonb ненадёжен — берём пачками и проверяем в Python
+    # Раньше тут каждые 5 минут выкачивалась ВСЯ таблица gs_users (все колонки) — это основной
+    # источник трафика Supabase. Теперь фильтр по jsonb на стороне БД + только нужные колонки;
+    # финальная проверка срока остаётся в Python.
     now = U.now()
-    rows = await db.select_all("gs_users", {"banned": "eq.false"})
+    rows = await db.select_all("gs_users", {
+        "banned": "eq.false",
+        "settings->>freeze_until": "not.is.null",
+        "select": "tg_id,settings",
+    })
     for u in rows:
         s = u.get("settings") or {}
         fu = s.get("freeze_until")
