@@ -1,6 +1,6 @@
 from urllib.parse import quote
 
-from aiogram.types import CopyTextButton, InlineKeyboardButton as B, InlineKeyboardMarkup as M
+from aiogram.types import CopyTextButton, InlineKeyboardButton as B, InlineKeyboardMarkup as M, WebAppInfo
 
 from .config import PLANS, cfg
 from .services import billing_prices as BP
@@ -34,6 +34,7 @@ def main_menu(uid: int | None = None) -> M:
             B(text="🎰 Рулетка", callback_data="roulette"),
             B(text="🎁 Заработать", callback_data="refs"),
         ],
+        *([[B(text="🎡 Колесо фортуны", web_app=WebAppInfo(url=f"{cfg.webhook_base}/app"))]] if cfg.webhook_base else []),
         [B(text="👤 Кабинет", callback_data="cabinet")],
         [B(text="📞 Поддержка", callback_data="support")],
     ])
@@ -201,5 +202,5 @@ def admin_menu() -> M:
         [B(text="🤝 Партнёры", callback_data="adm:partners"), B(text="📣 Рассылка", callback_data="adm:broadcast")],
         [B(text="🎛 Логирование личек", callback_data="adm:logging")],
         [B(text="🩺 Статус", callback_data="adm:status")],
-        [B(text="🎟 Промокоды", callback_data="adm:promos")],
+        [B(text="🎟 Промокоды", callback_data="adm:promos"), B(text="🎡 Колесо", callback_data="adm:wheel")],
     ])
