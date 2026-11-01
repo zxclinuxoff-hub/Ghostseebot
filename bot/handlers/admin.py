@@ -21,6 +21,7 @@ from ..db import DBError, db
 from ..services import users as U
 from ..services.logs import audit
 from ..services import settings as S
+from ..services import wheel as W
 
 router = Router(name="admin")
 router.message.filter(F.from_user.id.in_(cfg.admin_ids))
@@ -121,6 +122,8 @@ async def adm_cb(cb: CallbackQuery, state: FSMContext, bot: Bot):
         return await cb_logging_toggle(cb)
     elif act == "promos":
         return await adm_promos(cb)
+    elif act == "wheel":
+        await cb.message.answer(await W.admin_text())
     elif act == "menu":
         await cb.message.answer(HELP, reply_markup=K.admin_menu())
 
@@ -176,6 +179,25 @@ async def give(m: Message, command: CommandObject, bot: Bot):
         await bot.send_message(u["tg_id"], f"🎁 Тебе выдали подписку на {days} дн. Действует до {U.fmt_dt(u['sub_until'])}.")
     except Exception:
         pass
+
+
+@router.message(Command("spins"))
+async def spins_cmd(m: Message, command: CommandObject, bot: Bot):
+    a = (command.args or "").split()
+    if len(a) < 2 or not a[1].lstrip("-").isdigit():
+        return await m.answer("Формат: <code>/spins 123456 5</code> · <code>/spins @name 3</code> (минус — забрать)")
+    u = await _target(m, a[0])
+    if not u:
+        return
+    n = int(a[1])
+    total = await W.add_bonus(u["tg_id"], n)
+    await audit("info", "admin_spins", u["tg_id"], by=m.from_user.id, n=n)
+    await m.answer(f"✅ Бесплатных прокрутов у <code>{u['tg_id']}</code>: <b>{total}</b>")
+    if n > 0:
+        try:
+            await bot.send_message(u["tg_id"], f"🎡 Тебе выдали бесплатных прокрутов колеса фортуны: {n}. Открой «Колесо фортуны» в меню бота.")
+        except Exception:
+            pass
 
 
 @router.message(Command("take"))

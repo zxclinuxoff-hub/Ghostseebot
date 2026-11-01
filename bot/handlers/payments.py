@@ -6,12 +6,19 @@ from ..services import billing, donate, gifts
 from ..services import gift_rules as GR
 from ..services import donate_rules as DR
 from ..services import users as U
+from ..services import wheel as W
 
 router = Router(name="payments")
 
 
 @router.pre_checkout_query()
 async def pre_checkout(q: PreCheckoutQuery):
+    if q.invoice_payload.startswith("wheelpack:"):  # пакет прокрутов
+        ok = q.currency == "XTR" and await W.can_pack(q.from_user.id, int(q.invoice_payload.split(":")[1]), q.total_amount)
+        return await q.answer(ok=bool(ok), error_message=None if ok else "Пакет недоступен")
+    if q.invoice_payload.startswith("wheel:"):  # прокрут колеса фортуны
+        ok = q.currency == "XTR" and q.total_amount == W.PRICE and await W.can_pay(q.from_user.id)
+        return await q.answer(ok=bool(ok), error_message=None if ok else "Лимит прокрутов на сегодня исчерпан")
     if GR.is_gift(q.invoice_payload):
         u = await U.get_user(q.from_user.id)
         ok = (not (u and u.get("banned")) and q.currency == "XTR"
@@ -27,6 +34,8 @@ async def pre_checkout(q: PreCheckoutQuery):
 
 @router.message(F.successful_payment)
 async def paid(m: Message, bot: Bot):
+    if m.successful_payment.invoice_payload.startswith(("wheel:", "wheelpack:")):
+        return await W.on_paid(bot, m)
     if GR.is_gift(m.successful_payment.invoice_payload):
         return await gifts.on_paid(bot, m)  # подарок: подписка не выдаётся покупателю
     if DR.is_donation(m.successful_payment.invoice_payload):
