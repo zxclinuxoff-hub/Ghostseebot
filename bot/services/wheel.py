@@ -19,18 +19,20 @@ from .logs import audit
 PRICE = 1            # звёзд за прокрут
 DAILY_LIMIT = 50     # платных прокрутов в сутки на человека
 SHARDS_NEED = 10     # осколков до +3 дней
-PACKS = {5: 4, 10: 7}  # пакеты: прокрутов -> звёзд
+PACKS = {1: 1, 5: 4, 10: 8, 20: 16, 30: 24, 50: 40}  # пакеты: прокрутов -> звёзд (от 5 шт. скидка 20%)
 STREAK_DAYS = 7      # дней подряд до бесплатного прокрута
 FEED_PRIZES = ("d7", "d30", "bear")  # что показываем в ленте выигрышей
 _feed_cache = (0.0, [])
 ADMIN_CONTACT = "@morphynne"
 # (код, шанс %, иконка, название). Порядок = порядок секторов на колесе.
 PRIZES = [
-    ("shard", 36, "🔹", "Осколок"), ("free", 8, "🔁", "Ещё попытка"),
-    ("disc_m3", 10, "🏷", "Скидка на 3 мес"), ("disc_y1", 6, "💎", "Скидка на год"),
-    ("d1", 20, "🌙", "+1 день"), ("d3", 11, "🌗", "+3 дня"), ("d7", 5, "🌕", "+7 дней"),
-    ("d30", 1.5, "👑", "+30 дней"), ("bear", 0.5, "🧸", "Мишка"), ("vip", 2, "👻", "VIP на 7 дней"),
+    ("shard", 56.25, "🔹", "Осколок"), ("free", 6, "🔁", "Ещё попытка"),
+    ("disc_m3", 10, "🎫", "Скидка на 3 мес"), ("disc_y1", 6, "💎", "Скидка на год"),
+    ("d1", 15, "🌙", "+1 день"), ("d3", 3, "🌗", "+3 дня"), ("d7", 1, "🌕", "+7 дней"),
+    ("d30", 0.25, "👑", "+30 дней"), ("bear", 0.5, "🧸", "Мишка"), ("vip", 2, "👻", "VIP на 7 дней"),
 ]
+# Средняя выдача ≈0,59 дня подписки на прокрут. Для сравнения: тариф «1 месяц» даёт 0,75 дня за 1⭐.
+# Если поднять шансы дней, прокруты станут выгоднее покупки подписки, и продажи тарифов просядут.
 assert abs(sum(p[1] for p in PRIZES) - 100) < 1e-9
 _rng = random.SystemRandom()
 _PAGE = Path(__file__).resolve().parents[2] / "webapp" / "wheel.html"
@@ -208,12 +210,12 @@ async def on_paid(bot, m):
 
 async def admin_text() -> str:
     single = await db.count("gs_wheel_log", {"paid": "eq.true", "charge_id": "not.is.null", "prize": "not.like.pack*"})
-    p5 = await db.count("gs_wheel_log", {"prize": "eq.pack5"})
-    p10 = await db.count("gs_wheel_log", {"prize": "eq.pack10"})
-    stars = single * PRICE + p5 * PACKS[5] + p10 * PACKS[10]
+    cnt = {n: await db.count("gs_wheel_log", {"prize": f"eq.pack{n}"}) for n in PACKS}
+    stars = single * PRICE + sum(cnt[n] * PACKS[n] for n in PACKS)
+    packs_txt = " · ".join(f"{n}шт: <b>{c}</b>" for n, c in cnt.items())
     bears = await db.select("gs_wheel_log", {"prize": "eq.bear", "order": "id.desc", "limit": 10})
     b = "\n".join(f"• <code>{x['tg_id']}</code> ({U.fmt_dt(x['ts'])})" for x in bears) or "пока нет"
-    return (f"🎡 <b>Колесо фортуны</b>\nОдиночных прокрутов: <b>{single}</b> · пакетов 5шт: <b>{p5}</b> · 10шт: <b>{p10}</b>\nВыручка: <b>{stars}⭐</b>\n\n"
+    return (f"🎡 <b>Колесо фортуны</b>\nПакеты: {packs_txt}\nВыручка: <b>{stars}⭐</b>\n\n"
             f"🧸 Последние выигравшие мишку (выдать вручную):\n{b}\n\n"
             "Выдать прокруты: <code>/spins ID 5</code> или <code>/spins @name 3</code>\n"
             "Забрать: <code>/spins ID -2</code>")
@@ -239,7 +241,7 @@ async def h_state(request):
         await _save(r)
     last = await db.select("gs_wheel_log", {"tg_id": f"eq.{uid}", "order": "id.desc", "limit": 1})
     return web.json_response({
-        "price": PRICE, "need": SHARDS_NEED, "shards": r["shards"], "bonus": r["bonus_spins"], "credits": r["credits"],
+        "price": PRICE, "limit": DAILY_LIMIT, "need": SHARDS_NEED, "shards": r["shards"], "bonus": r["bonus_spins"], "credits": r["credits"],
         "left": max(0, DAILY_LIMIT - r["spins_today"]), "vip_until": r.get("vip_until"),
         "streak": r["streak"], "streak_need": STREAK_DAYS, "streak_gift": gift is True,
         "packs": [{"n": n, "stars": st} for n, st in PACKS.items()], "feed": await _feed(),
@@ -251,18 +253,11 @@ async def h_state(request):
 async def h_invoice(request):
     uid, body = await _auth(request)
     n = int(body.get("pack", 1))
-    bot = request.app["wheel_bot"]
-    if n == 1:
-        if not await can_pay(uid):
-            return web.json_response({"error": "Лимит прокрутов на сегодня исчерпан"})
-        link = await bot.create_invoice_link(title="Прокрут колеса", description="1 прокрут колеса фортуны", payload=f"wheel:{uid}",
-                                             currency="XTR", prices=[LabeledPrice(label="Прокрут", amount=PRICE)])
-    elif n in PACKS:
-        link = await bot.create_invoice_link(title=f"Пакет: {n} прокрутов", description=f"{n} прокрутов колеса фортуны",
-                                             payload=f"wheelpack:{n}:{uid}", currency="XTR",
-                                             prices=[LabeledPrice(label=f"{n} прокрутов", amount=PACKS[n])])
-    else:
+    if n not in PACKS:
         return web.json_response({"error": "Неизвестный пакет"})
+    link = await request.app["wheel_bot"].create_invoice_link(
+        title=f"Прокрутов: {n}", description=f"{n} прокрутов колеса фортуны", payload=f"wheelpack:{n}:{uid}",
+        currency="XTR", prices=[LabeledPrice(label=f"{n} прокрутов", amount=PACKS[n])])
     return web.json_response({"link": link})
 
 
