@@ -4,73 +4,106 @@
 <title>Колесо фортуны</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-:root{--bg:#14101c;--card:#1e1829;--line:#2d2540;--ac:#8b5cf6;--ac2:#c4b5fd;--tx:#ece8f5;--mu:#9a93a8;--gold:#f5c84b}
+:root{--bg:#f4f2f9;--card:#fff;--tx:#2a2438;--mu:#7b7590;--ac:#7c5cff;--ac2:#a58bff;--soft:#ece7ff;--line:#e4dff2;--gold:#f0b429;--sh:0 10px 30px rgba(80,60,140,.14)}
+[hidden]{display:none!important}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:radial-gradient(120% 70% at 50% 0,#271d3d 0,var(--bg) 60%);color:var(--tx);font:16px/1.4 -apple-system,system-ui,sans-serif;min-height:100vh;padding:env(safe-area-inset-top) 16px calc(20px + env(safe-area-inset-bottom));text-align:center}
-h1{font-size:22px;margin:18px 0 4px}.sub{color:var(--mu);font-size:13px;margin-bottom:14px}
-.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
-.chip{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:13px}
-.vip{color:var(--gold);border-color:#5b4a1e}
-.wrap{position:relative;width:min(88vw,340px);aspect-ratio:1;margin:8px auto 18px}
-.wrap:before{content:"";position:absolute;inset:-8px;border-radius:50%;background:conic-gradient(from 0,#6d3df0,#2a1f45,#a78bfa,#2a1f45,#6d3df0);filter:blur(10px);opacity:.55}
-canvas{position:relative;width:100%;height:100%;border-radius:50%;border:4px solid #3a2d57;transition:transform 5.2s cubic-bezier(.12,.72,.08,1)}
-.ptr{position:absolute;top:-12px;left:50%;transform:translateX(-50%);z-index:3;width:0;height:0;border:14px solid transparent;border-top:26px solid var(--gold);border-bottom:0;filter:drop-shadow(0 2px 4px #000a)}
-.hub{position:absolute;z-index:2;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:radial-gradient(#3a2d57,#1b1428);border:3px solid var(--ac2);display:grid;place-items:center;font-size:22px}
-button{font:600 16px inherit;font-family:inherit;border:0;border-radius:14px;padding:14px 18px;color:#fff;width:100%;max-width:340px;margin:5px auto;display:block;cursor:pointer}
-.main{background:linear-gradient(135deg,#7c4dff,#9d6bff);box-shadow:0 8px 24px #7c4dff55}
-.free{background:#2c8a5a}.ghost{background:var(--card);border:1px solid var(--line);color:var(--ac2)}
-button:disabled{opacity:.45}
-.modal{position:fixed;inset:0;background:#0009;display:none;align-items:flex-end;justify-content:center;z-index:9}
-.modal.on{display:flex}.sheet{background:var(--card);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:420px;max-height:80vh;overflow:auto;text-align:left}
+body{margin:0;background:radial-gradient(120% 60% at 50% -10%,#e5ddff 0,var(--bg) 60%) fixed;color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 16px calc(96px + env(safe-area-inset-bottom));text-align:center;overflow-x:hidden}
+h1{font-size:26px;margin:20px 0 2px;background:linear-gradient(90deg,#5b3df0,#a58bff,#5b3df0);background-size:200%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:flow 6s linear infinite}
+.sub{color:var(--mu);font-size:13px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:360px;margin:0 auto 6px;animation:up .6s both}
+.box{background:var(--card);border-radius:16px;padding:10px 12px;box-shadow:var(--sh);text-align:left}
+.box small{color:var(--mu);font-size:12px;display:block}.box b{font-size:15px}
+.bar{height:6px;border-radius:6px;background:var(--soft);margin-top:7px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:6px;transition:width .8s}
+.dots{display:flex;gap:5px;margin-top:8px}.dots i{width:100%;height:6px;border-radius:6px;background:var(--soft)}.dots i.on{background:linear-gradient(90deg,#ff9f45,#ffcf6b)}
+.vip{display:inline-block;margin:8px 0 0;background:linear-gradient(135deg,#fff3d1,#ffe08a);color:#7a5600;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(240,180,41,.35)}
+.wheel{position:relative;width:min(86vw,340px);aspect-ratio:1;margin:18px auto 26px;animation:float 5s ease-in-out infinite}
+.glow{position:absolute;inset:-14px;border-radius:50%;background:conic-gradient(from 0deg,#7c5cff,#e9e2ff,#a58bff,#e9e2ff,#7c5cff);filter:blur(14px);opacity:.5;animation:rot 9s linear infinite}
+.wheel.go .glow{opacity:.95;animation-duration:1.2s}
+canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 20px 40px rgba(80,60,140,.28),inset 0 0 0 5px #fff;transition:transform 5.4s cubic-bezier(.12,.72,.06,1)}
+.ptr{position:absolute;z-index:3;top:-14px;left:50%;transform:translateX(-50%);width:0;height:0;border:15px solid transparent;border-top:30px solid var(--ac);border-bottom:0;filter:drop-shadow(0 4px 5px rgba(60,40,140,.45));transform-origin:50% 0}
+.wheel.go .ptr{animation:tick .16s ease-in-out infinite}
+.hub{position:absolute;z-index:2;inset:0;margin:auto;width:60px;height:60px;border-radius:50%;background:radial-gradient(#fff 35%,var(--soft));border:4px solid var(--ac);box-shadow:0 6px 16px rgba(80,60,140,.35);display:grid;place-items:center;font-size:22px;color:var(--ac)}
+.open{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:12px;width:100%;max-width:340px;margin:0 auto;padding:17px;border:0;border-radius:20px;color:#fff;font-weight:700;font-size:19px;font-family:inherit;background:linear-gradient(135deg,#6a45ff,#a58bff);box-shadow:0 14px 30px rgba(124,92,255,.5);animation:pulse 2.4s ease-in-out infinite;transition:transform .15s}
+.open:active{transform:scale(.97)}.open:after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(90deg,transparent,#fff7,transparent);transform:skewX(-20deg);animation:shine 3s infinite}
+.open.empty{background:linear-gradient(135deg,#a79fbd,#c4bfd6);box-shadow:0 10px 22px rgba(120,110,150,.35);animation:none}
+.open:disabled{opacity:.6;animation:none}
+.cnt{background:#fff;color:var(--ac);border-radius:14px;padding:3px 12px;font-size:17px;min-width:48px;box-shadow:0 3px 8px rgba(40,20,120,.25)}
+.open.empty .cnt{color:#7b7590}
+.feed{max-width:360px;margin:22px auto 0;background:var(--card);border-radius:18px;padding:12px 14px;box-shadow:var(--sh);text-align:left;font-size:13px;color:var(--mu)}
+.feed b{color:var(--ac);font-size:14px}.feed div{padding:7px 0;border-bottom:1px solid var(--line);animation:up .5s both}.feed div:last-child{border:0}
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;gap:10px;justify-content:center;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#f4f2f9 35%)}
+.bottom button{border:0;border-radius:16px;padding:14px;font-weight:600;font-size:16px;font-family:inherit;cursor:pointer;transition:transform .15s}
+.bottom button:active{transform:scale(.96)}
+.buy{flex:1;max-width:260px;background:#fff;color:var(--ac);box-shadow:var(--sh);border:2px solid var(--soft)!important}.info{background:var(--soft);color:var(--ac);width:56px;font-size:20px!important}
+.modal{position:fixed;inset:0;z-index:9;background:#2a243866;backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center}.modal.on{display:flex;animation:fade .25s}
+.sheet{background:#fff;border-radius:26px 26px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));width:100%;max-width:440px;max-height:86vh;overflow:auto;text-align:left;animation:slide .35s cubic-bezier(.2,.9,.3,1)}
+.sheet h3{margin:0 0 4px;font-size:20px}.hint{color:var(--mu);font-size:13px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pack{position:relative;border:2px solid var(--line);background:#faf9fe;border-radius:18px;padding:14px 10px;text-align:center;cursor:pointer;font-family:inherit;color:var(--tx);transition:.2s}
+.pack:active{transform:scale(.96);border-color:var(--ac)}.pack b{display:block;font-size:24px;color:var(--ac)}.pack span{font-size:15px;font-weight:600}.pack small{display:block;color:var(--mu);font-size:12px;margin-top:2px}
+.pack em{position:absolute;top:-9px;right:10px;background:linear-gradient(135deg,#ff9f45,#ffcf6b);color:#5a3b00;font-weight:700;font-size:11px;font-style:normal;border-radius:10px;padding:3px 8px}
+.pack.best{border-color:var(--ac);background:linear-gradient(160deg,#f3eeff,#fff)}
 .row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
-.packs{display:flex;gap:8px;justify-content:center;max-width:340px;margin:6px auto}.packs button{margin:0;padding:12px 6px;font-size:14px}
-.feed{max-width:340px;margin:18px auto 0;text-align:left;font-size:13px;color:var(--mu)}.feed div{padding:6px 0;border-bottom:1px solid var(--line)}
-.big{font-size:44px;text-align:center}.res{white-space:pre-line;text-align:center;font-size:18px;margin:8px 0 16px}
+.big{font-size:64px;text-align:center;animation:pop .6s cubic-bezier(.2,1.6,.4,1)}.res{white-space:pre-line;text-align:center;font-size:18px;margin:8px 0 18px;font-weight:600}
+.ok{display:block;width:100%;border:0;border-radius:16px;padding:14px;font-weight:700;font-size:16px;font-family:inherit;color:#fff;background:linear-gradient(135deg,#6a45ff,#a58bff);box-shadow:0 10px 22px rgba(124,92,255,.4)}
+.cf{position:fixed;top:-12px;width:9px;height:14px;z-index:20;border-radius:2px;animation:fall 2s ease-in forwards}
+@keyframes flow{to{background-position:200%}}@keyframes up{from{opacity:0;transform:translateY(14px)}}@keyframes fade{from{opacity:0}}@keyframes slide{from{transform:translateY(100%)}}
+@keyframes float{50%{transform:translateY(-6px)}}@keyframes rot{to{transform:rotate(360deg)}}@keyframes tick{50%{transform:translateX(-50%) rotate(-14deg)}}
+@keyframes pulse{50%{box-shadow:0 18px 40px rgba(124,92,255,.7);transform:translateY(-2px)}}@keyframes shine{to{left:130%}}@keyframes pop{from{transform:scale(.2);opacity:0}}
+@keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:.8}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <h1>🎡 Колесо фортуны</h1>
-<div class="sub">1 прокрут = <span id="price">1</span> ⭐ · шанс считает сервер</div>
-<div class="chips"><div class="chip">🔹 <b id="sh">0</b>/<span id="need">10</span></div><div class="chip">🔥 <b id="st">0</b>/<span id="stn">7</span></div><div class="chip">Сегодня: <b id="left">50</b></div><div class="chip vip" id="vip" hidden>👻 VIP</div></div>
-<div class="wrap"><div class="ptr"></div><div class="hub">✦</div><canvas id="c" width="680" height="680"></canvas></div>
-<button class="main" id="spin">Крутить · 1 ⭐</button>
-<button class="free" id="fr" hidden></button>
-<button class="free" id="cr" hidden></button>
-<div class="packs" id="packs"></div>
-<button class="ghost" id="odds">📊 Шансы</button>
-<div class="feed" id="feed"></div>
+<div class="sub">Открывай и выигрывай дни подписки</div>
+<div class="stats">
+<div class="box"><small>🔹 Осколки</small><b><span id="sh">0</span> / <span id="need">10</span></b><div class="bar"><i id="shb"></i></div></div>
+<div class="box"><small>🔥 Серия дней</small><b><span id="st">0</span> / <span id="stn">7</span></b><div class="dots" id="dots"></div></div>
+</div>
+<div class="vip" id="vip" hidden>👻 VIP активен</div>
+<div class="wheel" id="wh"><div class="glow"></div><div class="ptr"></div><div class="hub">✦</div><canvas id="c" width="680" height="680"></canvas></div>
+<button class="open" id="open"><span>Открыть</span><span class="cnt" id="cnt">×0</span></button>
+<div class="sub" style="margin-top:10px">Сегодня осталось платных прокрутов: <b id="left">50</b></div>
+<div class="feed" id="feed" hidden></div>
+<div class="bottom"><button class="buy" id="buy">🛒 Купить прокруты</button><button class="info" id="odds">📊</button></div>
 <div class="modal" id="m"><div class="sheet" id="sheet"></div></div>
 <script>
-const tg=window.Telegram.WebApp;tg.ready();tg.expand();try{tg.setHeaderColor('#14101c');tg.setBackgroundColor('#14101c')}catch(e){}
+const tg=window.Telegram.WebApp;tg.ready();tg.expand();try{tg.setHeaderColor('#f4f2f9');tg.setBackgroundColor('#f4f2f9')}catch(e){}
 const $=id=>document.getElementById(id),esc=t=>String(t).replace(/</g,'&lt;');let S=null,rot=0,busy=false;
 async function api(n,b={}){const r=await fetch('/api/wheel/'+n,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,...b})});if(!r.ok)throw new Error(await r.text()||'Ошибка');return r.json()}
-function draw(){const c=$('c'),x=c.getContext('2d'),n=S.prizes.length,R=340,a=2*Math.PI/n,cols=['#3b2a66','#2a1f45'];
-S.prizes.forEach((p,i)=>{const s=-Math.PI/2+i*a;x.beginPath();x.moveTo(R,R);x.arc(R,R,R-6,s,s+a);x.closePath();x.fillStyle=p.code=='bear'||p.code=='d30'?'#5a3f12':cols[i%2];x.fill();x.strokeStyle='#4a3a70';x.lineWidth=3;x.stroke();
-x.save();x.translate(R,R);x.rotate(s+a/2);x.textAlign='center';x.fillStyle='#ece8f5';x.font='54px sans-serif';x.fillText(p.icon,235,18);x.font='bold 22px sans-serif';x.fillStyle='#c4b5fd';x.fillText(p.name.length>11?p.name.slice(0,11)+'…':p.name,150,10);x.restore()})}
+function draw(){const c=$('c'),x=c.getContext('2d'),n=S.prizes.length,R=340,a=2*Math.PI/n;
+S.prizes.forEach((p,i)=>{const s=-Math.PI/2+i*a,gold=p.code=='bear'||p.code=='d30',g=x.createRadialGradient(R,R,40,R,R,R);
+g.addColorStop(0,gold?'#fff6da':i%2?'#f1ecff':'#ffffff');g.addColorStop(1,gold?'#ffd978':i%2?'#ddd2ff':'#ebe6fa');
+x.beginPath();x.moveTo(R,R);x.arc(R,R,R-8,s,s+a);x.closePath();x.fillStyle=g;x.fill();x.strokeStyle='#cfc4f3';x.lineWidth=2;x.stroke();
+x.save();x.translate(R,R);x.rotate(s+a/2);x.textAlign='center';x.font='56px sans-serif';x.fillText(p.icon,232,20);x.font='bold 20px sans-serif';x.fillStyle='#5b4bb5';x.fillText(SHORT[p.code]||p.name,136,9);x.restore()});
+x.beginPath();x.arc(R,R,R-4,0,7);x.lineWidth=8;x.strokeStyle='#7c5cff';x.stroke()}
+const total=()=>S.bonus+S.credits,SHORT={shard:'Осколок',free:'Попытка',disc_m3:'−% на 3 мес',disc_y1:'−% на год',d1:'+1 день',d3:'+3 дня',d7:'+7 дней',d30:'+30 дней',bear:'Мишка',vip:'VIP'},word=n=>n==1?'прокрут':n<5?'прокрута':'прокрутов';
 function ago(s){return s<90?'только что':s<3600?Math.round(s/60)+' мин назад':s<86400?Math.round(s/3600)+' ч назад':Math.round(s/86400)+' дн назад'}
-function closeM(){$('m').classList.remove('on')}
-function show(h){$('sheet').innerHTML=h;$('m').classList.add('on')}
-function ui(){$('price').textContent=S.price;$('sh').textContent=S.shards;$('need').textContent=S.need;$('left').textContent=S.left;$('st').textContent=S.streak;$('stn').textContent=S.streak_need;
-const v=S.vip_until&&new Date(S.vip_until)>new Date();$('vip').hidden=!v;
-$('fr').hidden=S.bonus<=0;$('fr').textContent='🎁 Бесплатный прокрут ×'+S.bonus;$('fr').disabled=busy;
-$('cr').hidden=S.credits<=0;$('cr').textContent='🎟 Купленный прокрут ×'+S.credits;$('cr').disabled=busy||S.left<=0;
-$('spin').disabled=busy||S.left<=0;$('spin').textContent=S.left<=0?'Лимит на сегодня':'Крутить · '+S.price+' ⭐';
-$('packs').innerHTML=S.packs.map(p=>'<button class="ghost" '+(busy?'disabled':'')+' data-n="'+p.n+'">'+p.n+' прокрутов · '+p.stars+' ⭐</button>').join('');
-$('packs').querySelectorAll('button').forEach(b=>b.onclick=()=>pay(+b.dataset.n));
-$('feed').innerHTML=S.feed.length?'<b style="color:#c4b5fd">🏆 Недавние выигрыши</b>'+S.feed.map(f=>'<div>'+f.icon+' Игрок выиграл '+esc(f.name)+' · '+ago(f.ago)+'</div>').join(''):''}
-async function load(){S=await api('state');draw();ui();if(S.streak_gift){S.streak_gift=false;show('<div class="big">🔥</div><div class="res">'+S.streak_need+' дней подряд!\n+1 бесплатный прокрут</div><button class="main" onclick="closeM()">Отлично</button>')}}
+function closeM(){$('m').classList.remove('on')}function show(h){$('sheet').innerHTML=h;$('m').classList.add('on')}
+function ui(){$('sh').textContent=S.shards;$('need').textContent=S.need;$('shb').style.width=S.shards/S.need*100+'%';$('st').textContent=S.streak;$('stn').textContent=S.streak_need;
+$('dots').innerHTML=Array.from({length:S.streak_need},(_,i)=>'<i class="'+(i<S.streak?'on':'')+'"></i>').join('');
+$('vip').hidden=!(S.vip_until&&new Date(S.vip_until)>new Date());$('left').textContent=S.left;
+$('cnt').textContent='×'+total();$('open').classList.toggle('empty',total()==0);$('open').disabled=busy;$('buy').disabled=busy;
+$('feed').hidden=!S.feed.length;$('feed').innerHTML='<b>🏆 Недавние выигрыши</b>'+S.feed.map((f,i)=>'<div style="animation-delay:'+i*.07+'s">'+f.icon+' Игрок выиграл '+esc(f.name)+' · '+ago(f.ago)+'</div>').join('')}
+async function load(){S=await api('state');draw();ui();if(S.streak_gift){S.streak_gift=false;confetti(40);show('<div class="big">🔥</div><div class="res">'+S.streak_need+' дней подряд!\n+1 бесплатный прокрут</div><button class="ok" onclick="closeM()">Отлично</button>')}}
 $('m').onclick=e=>{if(e.target.id=='m')closeM()}
+function confetti(n){const col=['#7c5cff','#a58bff','#f0b429','#ff7aa8','#4cc9a0'];for(let i=0;i<n;i++){const d=document.createElement('i');d.className='cf';d.style.left=Math.random()*100+'vw';d.style.background=col[i%5];d.style.animationDelay=Math.random()*.5+'s';d.style.animationDuration=1.6+Math.random()*1.2+'s';document.body.appendChild(d);setTimeout(()=>d.remove(),3400)}}
 function land(res){const i=S.prizes.findIndex(p=>p.code==res.prize),w=360/S.prizes.length,j=(Math.random()-.5)*w*.6;
-rot=rot-(rot%360)+360*6-(i+.5)*w+j;$('c').style.transform='rotate('+rot+'deg)';
-return new Promise(r=>setTimeout(r,5400)).then(async()=>{busy=false;await load();tg.HapticFeedback&&tg.HapticFeedback.notificationOccurred('success');
-show('<div class="big">'+S.prizes[i].icon+'</div><div class="res">'+esc(res.text)+'</div><button class="main" onclick="closeM()">Отлично</button>')})}
-async function err(e){busy=false;ui();show('<div class="res">'+esc(e.message||e)+'</div><button class="ghost" onclick="closeM()">Закрыть</button>')}
+rot=rot-(rot%360)+360*6-(i+.5)*w+j;$('wh').classList.add('go');$('c').style.transform='rotate('+rot+'deg)';
+return new Promise(r=>setTimeout(r,5500)).then(async()=>{busy=false;$('wh').classList.remove('go');await load();tg.HapticFeedback&&tg.HapticFeedback.notificationOccurred('success');
+if(res.prize!='shard')confetti(['d7','d30','bear','vip'].includes(res.prize)?90:30);
+show('<div class="big">'+S.prizes[i].icon+'</div><div class="res">'+esc(res.text)+'</div><button class="ok" onclick="closeM()">Отлично</button>')})}
+async function err(e){busy=false;$('wh').classList.remove('go');ui();show('<div class="res">'+esc(e.message||e)+'</div><button class="ok" onclick="closeM()">Закрыть</button>')}
 async function run(kind){if(busy)return;busy=true;ui();try{const r=await api(kind);if(!r||r.error)throw new Error(r&&r.error||'Ошибка');S.last_id=r.id;land(r)}catch(e){err(e)}}
+$('open').onclick=()=>{if(busy)return;if(S.bonus>0)return run('free');if(S.credits>0&&S.left>0)return run('credit');
+if(S.credits>0)return show('<div class="res">Дневной лимит платных прокрутов исчерпан. Купленные прокруты сохранятся до завтра.</div><button class="ok" onclick="closeM()">Понятно</button>');shop()}
+function shop(){const one=S.packs[0];show('<h3>🛒 Купить прокруты</h3><div class="hint">Любой пакет остаётся на балансе, пока не потратишь. Лимит: '+S.limit+' платных прокрутов в день.</div><div class="grid">'+S.packs.map(p=>{const per=p.stars/p.n,off=Math.round((1-per/one.stars)*100);
+return '<button class="pack'+(p.n==50?' best':'')+'" data-n="'+p.n+'">'+(off>0?'<em>−'+off+'%</em>':'')+'<b>'+p.n+'</b><small style="margin:-3px 0 6px">'+word(p.n)+'</small><span>'+p.stars+' ⭐</span><small>'+(per%1?per.toFixed(2):per)+' ⭐ за прокрут</small></button>'}).join('')+'</div>');
+document.querySelectorAll('.pack').forEach(b=>b.onclick=()=>{closeM();pay(+b.dataset.n)})}
 async function pay(n){if(busy)return;busy=true;ui();try{const r=await api('invoice',{pack:n});if(r.error)throw new Error(r.error);
 tg.openInvoice(r.link,async st=>{if(st!=='paid'){busy=false;ui();return}
-for(let k=0;k<15;k++){const l=await api('last',{after:S.last_id});if(l.found){S.last_id=l.id;
-if(l.prize.startsWith('pack')){busy=false;await load();return show('<div class="big">🎟</div><div class="res">'+esc(l.text)+'</div><button class="main" onclick="closeM()">Отлично</button>')}
-return land(l)}await new Promise(r=>setTimeout(r,1000))}
-busy=false;await load();show('<div class="res">Платёж прошёл, результат придёт сообщением в бота.</div>')})}catch(e){err(e)}}
-$('spin').onclick=()=>pay(1);$('fr').onclick=()=>run('free');$('cr').onclick=()=>run('credit');
-$('odds').onclick=()=>show('<h3 style="margin:0 0 8px">📊 Шансы (за один прокрут)</h3>'+S.prizes.map(p=>'<div class="row"><span>'+p.icon+' '+p.name+'</span><b>'+p.p+'%</b></div>').join('')+'<p style="color:#9a93a8;font-size:13px">10 осколков = +3 дня. Заходи '+S.streak_need+' дней подряд: +1 бесплатный прокрут. Друг в боте: +1 прокрут. Секторы на колесе равные, реальные шансы только в этом списке. Скидки действуют 2,5 часа. Мишку выдаёт администратор вручную.</p><button class="ghost" onclick="closeM()">Закрыть</button>')
+for(let k=0;k<15;k++){const l=await api('last',{after:S.last_id});if(l.found){S.last_id=l.id;busy=false;await load();confetti(35);return show('<div class="big">🎟</div><div class="res">'+esc(l.text)+'</div><button class="ok" onclick="closeM()">Отлично</button>')}await new Promise(r=>setTimeout(r,1000))}
+busy=false;await load();show('<div class="res">Платёж прошёл, прокруты скоро появятся на балансе.</div><button class="ok" onclick="closeM()">Ок</button>')})}catch(e){err(e)}}
+$('buy').onclick=()=>{if(!busy)shop()};
+$('odds').onclick=()=>show('<h3>📊 Шансы за один прокрут</h3>'+S.prizes.map(p=>'<div class="row"><span>'+p.icon+' '+p.name+'</span><b>'+p.p+'%</b></div>').join('')+'<p class="hint" style="margin-top:12px">10 осколков = +3 дня подписки. 7 дней подряд = +1 бесплатный прокрут. Друг в боте = +1 прокрут. Секторы на колесе одинаковые, реальные шансы только в этом списке. Скидки действуют 2,5 часа. Мишку выдаёт администратор вручную.</p><button class="ok" onclick="closeM()">Закрыть</button>')
 load().catch(err)
 </script></body></html>
