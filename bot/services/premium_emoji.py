@@ -120,7 +120,10 @@ def prepare_method(method):
     if _is_html(getattr(method, "parse_mode", None)):
         for key in ("text", "caption"):
             val = getattr(method, key, None)
-            if isinstance(val, str) and "<tg-emoji" not in val:
+            if isinstance(val, str) and "\u2063" in val:
+                # Invisible marker: this message explicitly opts out of premium emoji conversion.
+                setattr(method, key, val.replace("\u2063", ""))
+            elif isinstance(val, str) and "<tg-emoji" not in val:
                 setattr(method, key, to_html(val))
     # InputMediaPhoto/Video… в editMessageMedia — caption лежит внутри media
     media = getattr(method, "media", None)
