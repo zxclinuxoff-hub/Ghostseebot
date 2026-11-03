@@ -18,24 +18,15 @@ def start_kb(with_settings_url: bool = True) -> M:
 
 
 def main_menu(uid: int | None = None) -> M:
-    """Раскладка как у референса: широкие ряды + пары. Кнопка админки — только для админов."""
+    """Компактное меню: короткие подписи и пары кнопок, админка видна только администраторам."""
     admin_rows = [[B(text="🛡 Админ-панель", callback_data="adm:menu")]] if uid in cfg.admin_ids else []
     return M(inline_keyboard=[
         *admin_rows,
-        [B(text="⭐ Подключить", callback_data="connect")],
-        [B(text="💳 Купить подписку", callback_data="buy")],
-        [B(text="⭐ Поддержать разработчика", callback_data="donate")],
-        [
-            B(text="🧩 Функционал", callback_data="cmds"),
-            B(text="⚙️ Настройки", callback_data="settings"),
-        ],
-        [B(text="⚙️ Настройка команд", callback_data="cmdcfg")],
-        [
-            B(text="🎰 Рулетка", callback_data="roulette"),
-            B(text="🎁 Заработать", callback_data="refs"),
-        ],
-        *([[B(text="🎡 Колесо фортуны", web_app=WebAppInfo(url=f"{cfg.webhook_base}/app"))]] if cfg.webhook_base else []),
-        [B(text="👤 Кабинет", callback_data="cabinet")],
+        [B(text="⭐ Подключить", callback_data="connect"), B(text="💳 Подписка", callback_data="buy")],
+        [B(text="🎡 Колесо фортуны", web_app=WebAppInfo(url=f"{cfg.webhook_base}/app")), B(text="🎰 Рулетка", callback_data="roulette")] if cfg.webhook_base else [B(text="🎰 Рулетка", callback_data="roulette")],
+        [B(text="🧩 Функции", callback_data="cmds"), B(text="⚙️ Настройки", callback_data="settings")],
+        [B(text="⚙️ Команды", callback_data="cmdcfg"), B(text="🎁 Заработать", callback_data="refs")],
+        [B(text="👤 Кабинет", callback_data="cabinet"), B(text="⭐ Поддержать", callback_data="donate")],
         [B(text="📞 Поддержка", callback_data="support")],
     ])
 
