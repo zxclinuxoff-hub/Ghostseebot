@@ -82,10 +82,12 @@ async def sw(c: Ctx):
 
 
 # ================= анимации =================
-async def frames(c: Ctx, items, delay=0.4):
+async def frames(c: Ctx, items, delay=0.4, premium=True):
+    # Маркер позволяет отключить преобразование в custom emoji только для этой анимации.
+    marker = "\u2063"
     for f in items:
         try:
-            await c.edit(f)
+            await c.edit(f if premium else marker + f)
         except Exception:
             pass
         await asyncio.sleep(delay)
@@ -108,7 +110,39 @@ def _tail(c): return (" " + esc(c.src)) if c.src else ""
 
 
 @command("love")
-async def love(c): await frames(c, ["🤍", "🩷", "❤️", "🧡", "💛", "💚", "💙", "💜", "💖💖💖", "❤️" + _tail(c)])
+async def love(c: Ctx):
+    """Радужная квадратная открытка из сердечек без Premium Custom Emoji."""
+    # Ровно пять строк: две сверху, строка с признанием, две снизу.
+    # В каждом кадре палитра сдвигается, создавая радужное переливание.
+    palettes = [
+        ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷"],
+        ["🧡", "💛", "💚", "💙", "💜", "🩷", "❤️"],
+        ["💛", "💚", "💙", "💜", "🩷", "❤️", "🧡"],
+        ["💚", "💙", "💜", "🩷", "❤️", "🧡", "💛"],
+        ["💙", "💜", "🩷", "❤️", "🧡", "💛", "💚"],
+        ["💜", "🩷", "❤️", "🧡", "💛", "💚", "💙"],
+        ["🩷", "❤️", "🧡", "💛", "💚", "💙", "💜"],
+    ]
+    animation = []
+    for shift, colors in enumerate(palettes):
+        row1 = "".join(colors[(i + shift) % len(colors)] for i in range(9))
+        row2 = "".join(colors[(i + shift + 2) % len(colors)] for i in range(9))
+        row4 = "".join(colors[(i + shift + 4) % len(colors)] for i in range(9))
+        row5 = "".join(colors[(i + shift + 6) % len(colors)] for i in range(9))
+        center_left = colors[(shift + 1) % len(colors)]
+        center_right = colors[(shift + 5) % len(colors)]
+        center = f"{center_left}{center_left} <b>Я ТЕБЯ ЛЮБЛЮ</b> {center_right}{center_right}"
+        animation.append("\n".join((row1, row2, center, row4, row5)))
+    final_colors = ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷"]
+    final = "\n".join((
+        "".join(final_colors[i % 7] for i in range(9)),
+        "".join(final_colors[(i + 2) % 7] for i in range(9)),
+        "❤️❤️ <b>Я ТЕБЯ ЛЮБЛЮ</b> ❤️❤️",
+        "".join(final_colors[(i + 4) % 7] for i in range(9)),
+        "".join(final_colors[(i + 6) % 7] for i in range(9)),
+    ))
+    animation.append(final + ("\n\n" + _tail(c) if c.src else ""))
+    await frames(c, animation, delay=0.45, premium=False)
 @command("fire")
 async def fire(c): await frames(c, ["🔥", "🔥🔥", "🔥🔥🔥", "🔥🔥🔥🔥", "🔥" + _tail(c)])
 @command("snow")
@@ -483,7 +517,7 @@ async def spam(c: Ctx):
     text = esc(m[2])
     for _ in range(min(MAX_REPEAT, int(m[1]))):  # по одному сообщению, как раньше
         await c.say(text)
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(random.uniform(0.005, 0.010))
 
 
 MAX_SPAMG_WORDS = 100
@@ -506,7 +540,7 @@ async def haha(c: Ctx):
     await c.delete()
     for _ in range(min(MAX_REPEAT, int(c.args) if c.args.isdigit() else 5)):  # по одному сообщению
         await c.say(laugh())
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(random.uniform(0.005, 0.010))
 
 
 @command("burn")
