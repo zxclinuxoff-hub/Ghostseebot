@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Колесо фортуны</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
@@ -16,7 +16,7 @@ h1{font-size:26px;margin:20px 0 2px;background:linear-gradient(90deg,#5b3df0,#a5
 .bar{height:6px;border-radius:6px;background:var(--soft);margin-top:7px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:6px;transition:width .8s}
 .dots{display:flex;gap:5px;margin-top:8px}.dots i{width:100%;height:6px;border-radius:6px;background:var(--soft)}.dots i.on{background:linear-gradient(90deg,#ff9f45,#ffcf6b)}
 .vip{display:inline-block;margin:8px 0 0;background:linear-gradient(135deg,#fff3d1,#ffe08a);color:#7a5600;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(240,180,41,.35)}
-.wheel{position:relative;width:min(86vw,340px);aspect-ratio:1;margin:18px auto 26px;animation:float 5s ease-in-out infinite}
+.wheel{position:relative;width:min(86vw,340px);aspect-ratio:1;margin:18px auto 26px;transform:none;animation:none}
 .glow{position:absolute;inset:-14px;border-radius:50%;background:conic-gradient(from 0deg,#7c5cff,#e9e2ff,#a58bff,#e9e2ff,#7c5cff);filter:blur(14px);opacity:.5;animation:rot 9s linear infinite}
 .wheel.go .glow{opacity:.95;animation-duration:1.2s}
 canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 20px 40px rgba(80,60,140,.28),inset 0 0 0 5px #fff;transition:transform 5.4s cubic-bezier(.12,.72,.06,1)}
@@ -24,7 +24,7 @@ canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 2
 .wheel.go .ptr{animation:tick .16s ease-in-out infinite}
 .hub{position:absolute;z-index:2;inset:0;margin:auto;width:60px;height:60px;border-radius:50%;background:radial-gradient(#fff 35%,var(--soft));border:4px solid var(--ac);box-shadow:0 6px 16px rgba(80,60,140,.35);display:grid;place-items:center;font-size:22px;color:var(--ac)}
 .open{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:12px;width:100%;max-width:340px;margin:0 auto;padding:17px;border:0;border-radius:20px;color:#fff;font-weight:700;font-size:19px;font-family:inherit;background:linear-gradient(135deg,#6a45ff,#a58bff);box-shadow:0 14px 30px rgba(124,92,255,.5);animation:pulse 2.4s ease-in-out infinite;transition:transform .15s}
-.open:active{transform:scale(.97)}.open:after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(90deg,transparent,#fff7,transparent);transform:skewX(-20deg);animation:shine 3s infinite}
+.open:active{transform:none}.open:after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(90deg,transparent,#fff7,transparent);transform:skewX(-20deg);animation:shine 3s infinite}
 .open.empty{background:linear-gradient(135deg,#a79fbd,#c4bfd6);box-shadow:0 10px 22px rgba(120,110,150,.35);animation:none}
 .open:disabled{opacity:.6;animation:none}
 .cnt{background:#fff;color:var(--ac);border-radius:14px;padding:3px 12px;font-size:17px;min-width:48px;box-shadow:0 3px 8px rgba(40,20,120,.25)}
@@ -33,14 +33,14 @@ canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 2
 .feed b{color:var(--ac);font-size:14px}.feed div{padding:7px 0;border-bottom:1px solid var(--line);animation:up .5s both}.feed div:last-child{border:0}
 .bottom{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;gap:10px;justify-content:center;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#f4f2f9 35%)}
 .bottom button{border:0;border-radius:16px;padding:14px;font-weight:600;font-size:16px;font-family:inherit;cursor:pointer;transition:transform .15s}
-.bottom button:active{transform:scale(.96)}
+.bottom button:active{transform:none}
 .buy{flex:1;max-width:260px;background:#fff;color:var(--ac);box-shadow:var(--sh);border:2px solid var(--soft)!important}.info{background:var(--soft);color:var(--ac);width:56px;font-size:20px!important}
 .modal{position:fixed;inset:0;z-index:9;background:#2a243866;backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center}.modal.on{display:flex;animation:fade .25s}
 .sheet{background:#fff;border-radius:26px 26px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom));width:100%;max-width:440px;max-height:86vh;overflow:auto;text-align:left;animation:slide .35s cubic-bezier(.2,.9,.3,1)}
 .sheet h3{margin:0 0 4px;font-size:20px}.hint{color:var(--mu);font-size:13px;margin-bottom:12px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pack{position:relative;border:2px solid var(--line);background:#faf9fe;border-radius:18px;padding:14px 10px;text-align:center;cursor:pointer;font-family:inherit;color:var(--tx);transition:.2s}
-.pack:active{transform:scale(.96);border-color:var(--ac)}.pack b{display:block;font-size:24px;color:var(--ac)}.pack span{font-size:15px;font-weight:600}.pack small{display:block;color:var(--mu);font-size:12px;margin-top:2px}
+.pack:active{transform:none;border-color:var(--ac)}.pack b{display:block;font-size:24px;color:var(--ac)}.pack span{font-size:15px;font-weight:600}.pack small{display:block;color:var(--mu);font-size:12px;margin-top:2px}
 .pack em{position:absolute;top:-9px;right:10px;background:linear-gradient(135deg,#ff9f45,#ffcf6b);color:#5a3b00;font-weight:700;font-size:11px;font-style:normal;border-radius:10px;padding:3px 8px}
 .pack.best{border-color:var(--ac);background:linear-gradient(160deg,#f3eeff,#fff)}
 .row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
@@ -49,7 +49,7 @@ canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 2
 .cf{position:fixed;top:-12px;width:9px;height:14px;z-index:20;border-radius:2px;animation:fall 2s ease-in forwards}
 @keyframes flow{to{background-position:200%}}@keyframes up{from{opacity:0;transform:translateY(14px)}}@keyframes fade{from{opacity:0}}@keyframes slide{from{transform:translateY(100%)}}
 @keyframes float{50%{transform:translateY(-6px)}}@keyframes rot{to{transform:rotate(360deg)}}@keyframes tick{50%{transform:translateX(-50%) rotate(-14deg)}}
-@keyframes pulse{50%{box-shadow:0 18px 40px rgba(124,92,255,.7);transform:translateY(-2px)}}@keyframes shine{to{left:130%}}@keyframes pop{from{transform:scale(.2);opacity:0}}
+@keyframes pulse{50%{box-shadow:0 18px 40px rgba(124,92,255,.7)}}@keyframes shine{to{left:130%}}@keyframes pop{from{transform:scale(.2);opacity:0}}
 @keyframes fall{to{transform:translateY(105vh) rotate(720deg);opacity:.8}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
@@ -67,14 +67,14 @@ canvas{position:relative;width:100%;height:100%;border-radius:50%;box-shadow:0 2
 <div class="bottom"><button class="buy" id="buy">🛒 Купить прокруты</button><button class="info" id="odds">📊</button></div>
 <div class="modal" id="m"><div class="sheet" id="sheet"></div></div>
 <script>
-const tg=window.Telegram.WebApp;tg.ready();tg.expand();try{tg.setHeaderColor('#f4f2f9');tg.setBackgroundColor('#f4f2f9')}catch(e){}
+const tg=window.Telegram.WebApp;tg.ready();try{tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}catch(e){}tg.expand();try{tg.setHeaderColor('#f4f2f9');tg.setBackgroundColor('#f4f2f9')}catch(e){}
 const $=id=>document.getElementById(id),esc=t=>String(t).replace(/</g,'&lt;');let S=null,rot=0,busy=false;
 async function api(n,b={}){const r=await fetch('/api/wheel/'+n,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,...b})});if(!r.ok)throw new Error(await r.text()||'Ошибка');return r.json()}
 function draw(){const c=$('c'),x=c.getContext('2d'),n=S.prizes.length,R=340,a=2*Math.PI/n;
 S.prizes.forEach((p,i)=>{const s=-Math.PI/2+i*a,gold=p.code=='bear'||p.code=='d30',g=x.createRadialGradient(R,R,40,R,R,R);
 g.addColorStop(0,gold?'#fff6da':i%2?'#f1ecff':'#ffffff');g.addColorStop(1,gold?'#ffd978':i%2?'#ddd2ff':'#ebe6fa');
 x.beginPath();x.moveTo(R,R);x.arc(R,R,R-8,s,s+a);x.closePath();x.fillStyle=g;x.fill();x.strokeStyle='#cfc4f3';x.lineWidth=2;x.stroke();
-x.save();x.translate(R,R);x.rotate(s+a/2);x.textAlign='center';x.font='56px sans-serif';x.fillText(p.icon,232,20);x.font='bold 20px sans-serif';x.fillStyle='#5b4bb5';x.fillText(SHORT[p.code]||p.name,136,9);x.restore()});
+x.save();x.translate(R,R);x.rotate(s+a/2);x.textAlign='center';x.font='56px \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Noto Color Emoji\", sans-serif';x.fillText(p.icon||'🎁',232,20);x.font='bold 20px sans-serif';x.fillStyle='#5b4bb5';x.fillText(SHORT[p.code]||p.name,136,9);x.restore()});
 x.beginPath();x.arc(R,R,R-4,0,7);x.lineWidth=8;x.strokeStyle='#7c5cff';x.stroke()}
 const total=()=>S.bonus+S.credits,SHORT={shard:'Осколок',free:'Попытка',disc_m3:'−% на 3 мес',disc_y1:'−% на год',d1:'+1 день',d3:'+3 дня',d7:'+7 дней',d30:'+30 дней',bear:'Мишка',vip:'VIP'},word=n=>n==1?'прокрут':n<5?'прокрута':'прокрутов';
 function ago(s){return s<90?'только что':s<3600?Math.round(s/60)+' мин назад':s<86400?Math.round(s/3600)+' ч назад':Math.round(s/86400)+' дн назад'}
