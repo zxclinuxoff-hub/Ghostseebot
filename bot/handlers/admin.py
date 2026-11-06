@@ -190,12 +190,18 @@ async def spins_cmd(m: Message, command: CommandObject, bot: Bot):
     if not u:
         return
     n = int(a[1])
+    if n == 0 or abs(n) > 10000:
+        return await m.answer("Укажи количество от 1 до 10000 или отрицательное число, чтобы забрать прокруты.")
     total = await W.add_bonus(u["tg_id"], n)
     await audit("info", "admin_spins", u["tg_id"], by=m.from_user.id, n=n)
     await m.answer(f"✅ Бесплатных прокрутов у <code>{u['tg_id']}</code>: <b>{total}</b>")
     if n > 0:
         try:
-            await bot.send_message(u["tg_id"], f"🎡 Тебе выдали бесплатных прокрутов колеса фортуны: {n}. Открой «Колесо фортуны» в меню бота.")
+            await bot.send_message(
+                u["tg_id"],
+                f"🎡 Вам выдано <b>{n}</b> прокрутов!\n\n"
+                "Заходите в казино GhostSee и крутите колесо фортуны 🍀"
+            )
         except Exception:
             pass
 

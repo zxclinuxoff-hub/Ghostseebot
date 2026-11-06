@@ -3,6 +3,7 @@ from aiogram.types import Message, PreCheckoutQuery
 
 from ..config import PLANS
 from ..services import billing, donate, gifts
+from ..services.billing_prices import price_for
 from ..services import gift_rules as GR
 from ..services import donate_rules as DR
 from ..services import users as U
@@ -27,9 +28,16 @@ async def pre_checkout(q: PreCheckoutQuery):
     if DR.is_donation(q.invoice_payload):  # донат: сумма и валюта должны совпасть с payload
         ok = DR.validate_payment(q.invoice_payload, q.currency, q.total_amount)
         return await q.answer(ok=bool(ok), error_message=None if ok else "Донат недоступен")
+    parts = q.invoice_payload.split(":")
     u = await U.get_user(q.from_user.id)
-    ok = not (u and u.get("banned")) and q.invoice_payload.split(":")[1:2] and q.invoice_payload.split(":")[1] in PLANS
-    await q.answer(ok=bool(ok), error_message=None if ok else "Покупка недоступна")
+    ok = False
+    if len(parts) == 3 and parts[0] == "sub" and parts[1] in PLANS and q.currency == "XTR" and not (u and u.get("banned")):
+        try:
+            expected, pct = price_for(u or {}, parts[1])
+            ok = int(parts[2]) == int(pct) and q.total_amount == int(expected)
+        except Exception:
+            ok = False
+    await q.answer(ok=bool(ok), error_message=None if ok else "Сумма или тариф покупки не совпадает. Создай новый счёт.")
 
 
 @router.message(F.successful_payment)
