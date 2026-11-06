@@ -56,6 +56,11 @@ class Supabase:
             f"(сеть/таймаут; {detail})"
         ) from last
 
+    async def rpc(self, function, payload=None):
+        """Call a Postgres RPC function through Supabase PostgREST."""
+        r = await self._req("POST", f"rpc/{function}", json=payload or {})
+        return r.json() if r.text else None
+
     async def healthcheck(self):
         """Проверяет реальное чтение таблицы Supabase с текущими URL/ключом."""
         r = await self._req(
