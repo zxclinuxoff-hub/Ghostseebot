@@ -31,6 +31,15 @@ async def on_paid(bot: Bot, m: Message):
         await audit("error", "pay_bad_payload", uid, payload=sp.invoice_payload)
         return
     u, _ = await U.ensure_user(m.from_user)
+    expected, expected_pct = price_for(u, plan)
+    try:
+        payload_pct = int(sp.invoice_payload.split(":")[2])
+    except (ValueError, IndexError):
+        payload_pct = -1
+    if sp.currency != "XTR" or sp.total_amount != expected or payload_pct != expected_pct:
+        await audit("error", "pay_amount_mismatch", uid, plan=plan, currency=sp.currency,
+                    amount=sp.total_amount, expected=expected, payload_pct=payload_pct, expected_pct=expected_pct)
+        return
 
     partner, share = None, 0
     if u.get("partner_code"):

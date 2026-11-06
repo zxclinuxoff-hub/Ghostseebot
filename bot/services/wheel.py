@@ -89,10 +89,8 @@ async def can_pay(uid: int) -> bool:
 
 
 async def add_bonus(uid: int, n: int) -> int:
-    r = await _row(uid)
-    r["bonus_spins"] = max(0, int(r.get("bonus_spins") or 0) + n)
-    await _save(r)
-    return r["bonus_spins"]
+    result = await db.rpc("gs_wheel_admin_add", {"p_tg_id": uid, "p_amount": n})
+    return int(result["bonus_spins"] if isinstance(result, dict) else result)
 
 
 async def _apply(uid: int, code: str) -> str:
@@ -129,7 +127,7 @@ async def _apply(uid: int, code: str) -> str:
     return txt
 
 
-async def _finish(bot, uid: int, charge_id, paid: bool):
+async def _finish(bot, uid: int, charge_id, paid: bool, count_daily: bool = True):
     """Крутит, пишет лог (charge_id уникален: повторная доставка платежа не даёт второй приз), выдаёт приз."""
     code = roll()
     rows = await db.insert("gs_wheel_log", {"tg_id": uid, "prize": code, "paid": paid, "charge_id": charge_id},
@@ -137,7 +135,7 @@ async def _finish(bot, uid: int, charge_id, paid: bool):
         await db.insert("gs_wheel_log", {"tg_id": uid, "prize": code, "paid": paid})
     if not rows:
         return None  # этот платёж уже обработан
-    if paid:
+    if paid and count_daily:
         r = await _row(uid)
         r["spins_today"] += 1
         await _save(r)
@@ -274,23 +272,26 @@ async def h_invoice(request):
 
 async def h_credit(request):
     uid, _ = await _auth(request)
-    r = await _row(uid)
-    if r["credits"] <= 0:
-        return web.json_response({"error": "Купленных прокрутов нет"})
-    if r["spins_today"] >= DAILY_LIMIT:
-        return web.json_response({"error": "Лимит прокрутов на сегодня исчерпан"})
-    r["credits"] -= 1
-    await _save(r)
-    return web.json_response(await _finish(request.app["wheel_bot"], uid, None, True))
+    try:
+        await db.rpc("gs_wheel_spend", {"p_tg_id": uid, "p_kind": "credit", "p_n": 1})
+    except Exception as e:
+        msg = str(e)
+        if "NO_CREDITS" in msg:
+            return web.json_response({"error": "Купленных прокрутов нет"})
+        if "DAILY_LIMIT" in msg:
+            return web.json_response({"error": "Лимит прокрутов на сегодня исчерпан"})
+        raise
+    return web.json_response(await _finish(request.app["wheel_bot"], uid, None, True, count_daily=False))
 
 
 async def h_free(request):
     uid, _ = await _auth(request)
-    r = await _row(uid)
-    if int(r.get("bonus_spins") or 0) <= 0:
-        return web.json_response({"error": "Бесплатных прокрутов нет"})
-    r["bonus_spins"] -= 1
-    await _save(r)
+    try:
+        await db.rpc("gs_wheel_spend", {"p_tg_id": uid, "p_kind": "free", "p_n": 1})
+    except Exception as e:
+        if "NO_BONUS" in str(e):
+            return web.json_response({"error": "Бесплатных прокрутов нет"})
+        raise
     return web.json_response(await _finish(request.app["wheel_bot"], uid, None, False))
 
 
@@ -318,18 +319,18 @@ async def h_multi(request):
     n = int(body.get("n", 0))
     if n not in (5, 10):
         return web.json_response({"error": "Можно открыть 5 или 10 за раз"})
+    try:
+        spent = await db.rpc("gs_wheel_spend", {"p_tg_id": uid, "p_kind": "multi", "p_n": n})
+    except Exception as e:
+        msg = str(e)
+        if "NO_CREDITS" in msg:
+            return web.json_response({"error": "Не хватает прокрутов"})
+        if "DAILY_LIMIT" in msg:
+            return web.json_response({"error": "Дневной лимит платных прокрутов исчерпан"})
+        raise
+    use_free = int(spent["free_used"])
     r = await _row(uid)
-    use_free = min(r["bonus_spins"], n)
-    need = n - use_free
-    left = max(0, DAILY_LIMIT - r["spins_today"])
-    if need > r["credits"]:
-        return web.json_response({"error": "Не хватает прокрутов"})
-    if need > left:
-        return web.json_response({"error": f"Дневной лимит платных прокрутов: осталось {left}"})
     codes = [roll() for _ in range(n)]
-    r["bonus_spins"] -= use_free
-    r["credits"] -= need
-    r["spins_today"] += need
     cnt, days, disc, conv = _effects(r, codes)
     await _save(r)
     await db.insert("gs_wheel_log", [{"tg_id": uid, "prize": c, "paid": i >= use_free} for i, c in enumerate(codes)], returning=False)
@@ -433,23 +434,20 @@ async def h_crash_start(request):
     bet = int(body.get("bet", 1))
     if not 1 <= bet <= CRASH_MAX_BET:
         return web.json_response({"error": f"Ставка от 1 до {CRASH_MAX_BET} прокрутов"})
-    act = await _crash_active(uid)
-    if act:
-        return web.json_response({"error": "Раунд уже идёт", "active": act})
-    r = await _row(uid)
-    if r["bonus_spins"] + r["credits"] < bet:
-        return web.json_response({"error": "Не хватает прокрутов"})
-    free = min(r["bonus_spins"], bet)       # не важно, какие прокруты: сначала бесплатные, потом купленные
-    r["bonus_spins"] -= free
-    r["credits"] -= bet - free
-    await _save(r)
     point, started = _crash_point(), U.now()
-    row = {"tg_id": uid, "bet": bet, "point": point, "started_at": U.iso(started)}
-    if point <= 1.0:                        # мгновенный краш (вероятность ≈ CRASH_EDGE)
-        row.update(status="crashed", mult=1.0, payout=0)
-        await db.insert("gs_crash", row, returning=False)
+    try:
+        rows = await db.rpc("gs_crash_start", {"p_tg_id": uid, "p_bet": bet, "p_point": point, "p_started_at": U.iso(started)})
+    except Exception as e:
+        msg = str(e)
+        if "ROUND_ACTIVE" in msg:
+            act = await _crash_active(uid)
+            return web.json_response({"error": "Раунд уже идёт", "active": act})
+        if "NO_SPINS" in msg:
+            return web.json_response({"error": "Не хватает прокрутов"})
+        raise
+    row = rows[0] if isinstance(rows, list) else rows
+    if point <= 1.0:
         return web.json_response({"crashed": True, "mult": 1.0, "bet": bet})
-    rows = await db.insert("gs_crash", row)
     return web.json_response({"id": rows[0]["id"], "bet": bet, "start_ms": int(started.timestamp() * 1000),
                               "now_ms": int(time.time() * 1000)})
 

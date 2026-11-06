@@ -49,10 +49,15 @@ async def _run_due_jobs(bot: Bot):
                 else:
                     await bot.send_message(p["owner_chat"], "⏰ <b>Напоминание:</b> " + p["text"])
         except Exception as e:
-            if is_network_error(e) and p.get("tries", 0) < 3:  # сеть моргнула — пробуем ещё раз через 10 сек
-                await biz.schedule(j["kind"], 10, **{**p, "tries": p.get("tries", 0) + 1})
+            # Retry bounded failures too: Telegram may return temporary 5xx/rate limits
+            # that are not classified as network errors. Jobs remain bounded to 3 retries.
+            tries = int(p.get("tries", 0) or 0)
+            if tries < 3:
+                delay = 10 if is_network_error(e) else 30
+                await biz.schedule(j["kind"], delay, **{**p, "tries": tries + 1})
+                await audit("warn", "job_retry", None, kind=j["kind"], attempt=tries + 1, err=str(e)[:180])
             else:
-                await audit("warn", "job_failed", None, kind=j["kind"], err=str(e)[:200])
+                await audit("error", "job_failed", None, kind=j["kind"], tries=tries, err=str(e)[:200])
     if len(rows) == 50:  # могли остаться ещё due-задачи — проверим сразу
         return biz.set_job_next(0)
     nxt = await db.select("gs_jobs", {"order": "run_at.asc", "limit": 1})  # ближайшая будущая
