@@ -1,5 +1,8 @@
 """Колесо фортуны (Mini App). Шанс считается только здесь, на сервере; в приложении только показ."""
+import asyncio
 import datetime as dt
+import math
+from collections import Counter
 import hashlib
 import hmac
 import json
@@ -23,16 +26,22 @@ PACKS = {1: 1, 5: 4, 10: 8, 20: 16, 30: 24, 50: 40}  # пакеты: прокр�
 STREAK_DAYS = 7      # дней подряд до бесплатного прокрута
 FEED_PRIZES = ("d7", "d30", "bear")  # что показываем в ленте выигрышей
 _feed_cache = (0.0, [])
+# Самолётик: ставка прокрутами (любыми: бесплатными или купленными), выигрыш осколками, они суммируются с осколками колеса.
+CRASH_EDGE = 0.07   # преимущество заведения: при любой стратегии игроки в среднем получают 93% ставки
+CRASH_CAP = 50.0    # потолок множителя
+CRASH_K = 0.09      # рост множителя: m(t) = e^(K·t), ×2 примерно за 7,7 с, ×10 за 26 с
+CRASH_MAX_BET = 10
+CRASH_SHARDS = 1.5  # осколков за каждый прокрут ставки при ×1.00: на множителе x выплата = ставка·x·1,5 осколка
 ADMIN_CONTACT = "@morphynne"
 # (код, шанс %, иконка, название). Порядок = порядок секторов на колесе.
 PRIZES = [
     # Осколки и скидки — частые награды; мишка — редкий приз (0,05%, примерно 1 на 2000 прокрутов в среднем).
-    ("shard", 60.0, "🔹", "Осколок"), ("free", 5.0, "🔁", "Ещё попытка"),
+    ("shard", 59.5, "🔹", "Осколок"), ("free", 5.0, "🔁", "Ещё попытка"),
     ("disc_m3", 13.0, "🎫", "Скидка на 3 мес"), ("disc_y1", 8.0, "💎", "Скидка на год"),
-    ("d1", 9.0, "🌙", "+1 день"), ("d2", 1.5, "🌗", "+2 дня"), ("d3", 2.5, "🌗", "+3 дня"), ("d7", 0.5, "🌕", "+7 дней"),
+    ("d1", 10.0, "🌙", "+1 день"), ("d2", 1.2, "🌗", "+2 дня"), ("d3", 2.0, "🌗", "+3 дня"), ("d7", 0.8, "🌕", "+7 дней"),
     ("d30", 0.05, "👑", "+30 дней"), ("bear", 0.05, "🧸", "Мишка"), ("vip", 0.4, "👻", "VIP на 7 дней"),
 ]
-# 21% на скидки; 13% на +1 или +3 дня; 60% на осколки. Вероятности показываются в Mini App из этого же списка.
+# 21% на скидки; ~16% на +1…+3 дня; 56,5% на осколки. Вероятности показываются в Mini App из этого же списка.
 assert abs(sum(p[1] for p in PRIZES) - 100) < 1e-9
 _rng = random.SystemRandom()
 _PAGE = Path(__file__).resolve().parents[2] / "webapp" / "wheel.html"
@@ -173,7 +182,7 @@ async def _feed() -> list:
     now, out = U.now(), []
     for x in rows:
         p = next(p for p in PRIZES if p[0] == x["prize"])
-        out.append({"icon": p[2], "name": p[3], "ago": int((now - U.parse(x["ts"])).total_seconds())})
+        out.append({"code": x["prize"], "icon": p[2], "name": p[3], "ago": int((now - U.parse(x["ts"])).total_seconds())})
     _feed_cache = (time.time(), out)
     return out
 
@@ -247,6 +256,8 @@ async def h_state(request):
         "packs": [{"n": n, "stars": st} for n, st in PACKS.items()], "feed": await _feed(),
         "last_id": last[0]["id"] if last else 0,
         "prizes": [{"code": c, "p": p, "icon": i, "name": n} for c, p, i, n in PRIZES],
+        "crash": {"k": CRASH_K, "cap": CRASH_CAP, "max_bet": CRASH_MAX_BET, "shards_per": CRASH_SHARDS, "rtp": round((1 - CRASH_EDGE) * 100),
+                  "active": await _crash_active(uid)},
     })
 
 
@@ -283,6 +294,199 @@ async def h_free(request):
     return web.json_response(await _finish(request.app["wheel_bot"], uid, None, False))
 
 
+def _effects(r: dict, codes: list):
+    """Суммарный эффект пачки прокрутов (меняет r). Возвращает (счётчик, дни, скидки, осколков->дни)."""
+    cnt = Counter(codes)
+    days = sum(cnt[f"d{n}"] * n for n in (1, 2, 3, 7, 30))
+    r["shards"] += cnt["shard"]
+    conv, r["shards"] = divmod(r["shards"], SHARDS_NEED)
+    days += conv * 3
+    r["bonus_spins"] += cnt["free"]
+    if cnt["vip"]:
+        base = max(U.now(), U.parse(r.get("vip_until")) or U.now())
+        r["vip_until"] = U.iso(base + dt.timedelta(days=7 * cnt["vip"]))
+    disc = {}
+    for plan in ("m3", "y1"):
+        if cnt[f"disc_{plan}"]:
+            disc[plan] = max(_rng.choice(range(10, 36, 5) if plan == "y1" else range(5, 21, 5)) for _ in range(cnt[f"disc_{plan}"]))
+    return cnt, days, disc, conv
+
+
+async def h_multi(request):
+    """Открыть 5 или 10 прокрутов за раз: сначала бесплатные, потом купленные. Всего ~5 запросов к БД на пачку."""
+    uid, body = await _auth(request)
+    n = int(body.get("n", 0))
+    if n not in (5, 10):
+        return web.json_response({"error": "Можно открыть 5 или 10 за раз"})
+    r = await _row(uid)
+    use_free = min(r["bonus_spins"], n)
+    need = n - use_free
+    left = max(0, DAILY_LIMIT - r["spins_today"])
+    if need > r["credits"]:
+        return web.json_response({"error": "Не хватает прокрутов"})
+    if need > left:
+        return web.json_response({"error": f"Дневной лимит платных прокрутов: осталось {left}"})
+    codes = [roll() for _ in range(n)]
+    r["bonus_spins"] -= use_free
+    r["credits"] -= need
+    r["spins_today"] += need
+    cnt, days, disc, conv = _effects(r, codes)
+    await _save(r)
+    await db.insert("gs_wheel_log", [{"tg_id": uid, "prize": c, "paid": i >= use_free} for i, c in enumerate(codes)], returning=False)
+    patch = {}
+    if disc:
+        u = await U.get_user(uid, fresh=True) or {}
+        until = U.iso(U.now() + dt.timedelta(hours=2, minutes=30))
+        for plan, pct in disc.items():
+            patch[f"disc_{plan}"] = max(pct, int(u.get(f"disc_{plan}") or 0))
+            patch[f"disc_{plan}_until"] = until
+        await U.patch_user(uid, **patch)
+    if days:
+        await U.grant(uid, days)
+    lines = [f"{p[2]} {p[3]} ×{cnt[p[0]]}" for p in PRIZES if cnt[p[0]]]
+    if days:
+        lines.append(f"🎉 Итого +{days} дн. подписки")
+    for plan in disc:
+        lines.append(f"🏷 Скидка {patch['disc_' + plan]}% на {'год' if plan == 'y1' else '3 мес'} (2,5 часа)")
+    if cnt["bear"]:
+        lines.append(f"🧸 Мишка ×{cnt['bear']}! Напишите администратору для выдачи — {ADMIN_CONTACT}")
+    text = "\n".join(lines)
+    bot = request.app["wheel_bot"]
+    try:
+        await bot.send_message(uid, f"🎡 Открыто {n}:\n{text}")
+    except Exception:
+        pass
+    if cnt["bear"]:
+        u = await U.get_user(uid) or {}
+        for aid in cfg.admin_ids:
+            try:
+                await bot.send_message(aid, f"🧸 Мишка выпал ({cnt['bear']} шт.)! <code>{uid}</code> {u.get('first_name', '')} "
+                                            f"{('@' + u['username']) if u.get('username') else ''}")
+            except Exception:
+                pass
+    await audit("info", "wheel_multi", uid, n=n, days=days)
+    return web.json_response({"results": codes, "counts": dict(cnt), "text": text, "days": days})
+
+
+def _stoch(x: float) -> int:
+    """Несмещённое округление: 2,4 прокрута = 2 или 3 с вероятностью 60/40, среднее сохраняется."""
+    f = math.floor(x)
+    return f + (1 if _rng.random() < x - f else 0)
+
+
+def _crash_point() -> float:
+    u = 1.0 - _rng.random()  # (0; 1]
+    return max(1.0, min(CRASH_CAP, math.floor((1 - CRASH_EDGE) / u * 100) / 100))
+
+
+def _mult_at(row: dict, now) -> float:
+    return math.exp(CRASH_K * max(0.0, (now - U.parse(row["started_at"])).total_seconds()))
+
+
+async def _crash_finish(row: dict, status: str, mult: float, payout: int = 0):
+    """Закрывает раунд один раз (фильтр status=active защищает от двойной выплаты). Возвращает (закрыт ли, дней подписки)."""
+    done = await db.update("gs_crash", {"id": f"eq.{row['id']}", "status": "eq.active"},
+                           {"status": status, "mult": mult, "payout": payout})
+    days = 0
+    if done and payout:
+        try:
+            r = await _row(row["tg_id"])
+            conv, r["shards"] = divmod(r["shards"] + payout, SHARDS_NEED)  # осколки суммируются; 10 штук = +3 дня
+            await _save(r)
+            if conv:
+                days = conv * 3
+                await U.grant(row["tg_id"], days)
+        except Exception as e:
+            await audit("error", "crash_payout_failed", row["tg_id"], id=row["id"], payout=payout, err=str(e)[:200])
+            raise
+    return bool(done), days
+
+
+async def _crash_check(row: dict):
+    """Сверка раунда со временем: (статус, множитель, осколков, дней); статус active|crashed|cashed|done."""
+    point, m = float(row["point"]), _mult_at(row, U.now())
+    if m < point:
+        return "active", math.floor(m * 100) / 100, 0, 0
+    if point >= CRASH_CAP:  # дошёл до потолка: авто-вывод
+        pay = _stoch(row["bet"] * CRASH_CAP * CRASH_SHARDS)
+        ok, days = await _crash_finish(row, "cashed", CRASH_CAP, pay)
+        return ("cashed", CRASH_CAP, pay, days) if ok else ("done", point, 0, 0)
+    ok, _ = await _crash_finish(row, "crashed", point)
+    return ("crashed", point, 0, 0) if ok else ("done", point, 0, 0)
+
+
+async def _crash_row(uid: int):
+    rows = await db.select("gs_crash", {"tg_id": f"eq.{uid}", "status": "eq.active", "order": "id.desc", "limit": 1})
+    return rows[0] if rows else None
+
+
+async def _crash_active(uid: int):
+    row = await _crash_row(uid)
+    if not row or (await _crash_check(row))[0] != "active":
+        return None
+    return {"id": row["id"], "bet": row["bet"], "start_ms": int(U.parse(row["started_at"]).timestamp() * 1000),
+            "now_ms": int(time.time() * 1000)}
+
+
+async def h_crash_start(request):
+    uid, body = await _auth(request)
+    bet = int(body.get("bet", 1))
+    if not 1 <= bet <= CRASH_MAX_BET:
+        return web.json_response({"error": f"Ставка от 1 до {CRASH_MAX_BET} прокрутов"})
+    act = await _crash_active(uid)
+    if act:
+        return web.json_response({"error": "Раунд уже идёт", "active": act})
+    r = await _row(uid)
+    if r["bonus_spins"] + r["credits"] < bet:
+        return web.json_response({"error": "Не хватает прокрутов"})
+    free = min(r["bonus_spins"], bet)       # не важно, какие прокруты: сначала бесплатные, потом купленные
+    r["bonus_spins"] -= free
+    r["credits"] -= bet - free
+    await _save(r)
+    point, started = _crash_point(), U.now()
+    row = {"tg_id": uid, "bet": bet, "point": point, "started_at": U.iso(started)}
+    if point <= 1.0:                        # мгновенный краш (вероятность ≈ CRASH_EDGE)
+        row.update(status="crashed", mult=1.0, payout=0)
+        await db.insert("gs_crash", row, returning=False)
+        return web.json_response({"crashed": True, "mult": 1.0, "bet": bet})
+    rows = await db.insert("gs_crash", row)
+    return web.json_response({"id": rows[0]["id"], "bet": bet, "start_ms": int(started.timestamp() * 1000),
+                              "now_ms": int(time.time() * 1000)})
+
+
+def _crash_json(st, row):
+    status, mult, pay, days = st
+    return web.json_response({"status": status, "mult": mult, "shards": pay, "days": days, "bet": row["bet"]})
+
+
+async def h_crash_cash(request):
+    uid, _ = await _auth(request)
+    row = await _crash_row(uid)
+    if not row:
+        return web.json_response({"status": "none"})
+    m = math.floor(_mult_at(row, U.now()) * 100) / 100
+    if m >= float(row["point"]):            # опоздал: самолёт уже улетел
+        return _crash_json(await _crash_check(row), row)
+    pay = _stoch(row["bet"] * m * CRASH_SHARDS)
+    ok, days = await _crash_finish(row, "cashed", m, pay)
+    return _crash_json(("cashed", m, pay, days) if ok else ("done", m, 0, 0), row)
+
+
+async def h_crash_wait(request):
+    """Долгий запрос: держится до момента краха и сообщает результат (клиент не знает точку заранее)."""
+    uid, _ = await _auth(request)
+    row = await _crash_row(uid)
+    if not row:
+        return web.json_response({"status": "none"})
+    left = math.log(float(row["point"])) / CRASH_K - (U.now() - U.parse(row["started_at"])).total_seconds()
+    if left > 0:
+        await asyncio.sleep(min(left + 0.05, 75))
+    row = await _crash_row(uid)
+    if not row:                              # клиент уже забрал выигрыш
+        return web.json_response({"status": "none"})
+    return _crash_json(await _crash_check(row), row)
+
+
 async def h_last(request):
     uid, body = await _auth(request)
     rows = await db.select("gs_wheel_log", {"tg_id": f"eq.{uid}", "id": f"gt.{int(body.get('after', 0))}",
@@ -299,5 +503,5 @@ async def h_page(_request):
 def setup(app, bot):
     app["wheel_bot"] = bot
     app.router.add_get("/app", h_page)
-    for name, h in (("state", h_state), ("invoice", h_invoice), ("free", h_free), ("credit", h_credit), ("last", h_last)):
+    for name, h in (("state", h_state), ("invoice", h_invoice), ("free", h_free), ("credit", h_credit), ("multi", h_multi), ("crash_start", h_crash_start), ("crash_cash", h_crash_cash), ("crash_wait", h_crash_wait), ("last", h_last)):
         app.router.add_post(f"/api/wheel/{name}", h)
