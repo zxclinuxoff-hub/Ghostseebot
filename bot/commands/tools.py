@@ -505,58 +505,80 @@ async def ai(c: Ctx):
 
 @command("sound")
 async def sound(c: Ctx):
-    """Озвучивает текст через Edge TTS без ключа OpenRouter."""
+    """Преобразует текст в настоящее голосовое сообщение через локальный Piper TTS."""
     import os
+    import sys
+    import tempfile
+    from pathlib import Path
+
     text = (c.src or "").strip()
     if not text:
         raise ValueError("Напиши текст: .sound Привет, GhostSee!")
-    if len(text) > 4500:
-        raise ValueError("Слишком длинный текст. Максимум 4500 символов.")
+    if len(text) > 2500:
+        raise ValueError("Слишком длинный текст. Максимум 2500 символов.")
 
-    # Edge TTS не расходует бесплатную квоту OpenRouter/HeyGen.
-    # Старое значение nadine от HeyGen заменяем на русскую нейронную озвучку.
-    voice = os.getenv("AI_TTS_VOICE", "ru-RU-SvetlanaNeural").strip()
-    if not voice or voice.lower() == "nadine":
-        voice = "ru-RU-SvetlanaNeural"
+    # Piper синтезирует речь локально: API-ключи и внешние TTS-сервисы не нужны.
+    voice = os.getenv("PIPER_VOICE", "ru_RU-irina-medium").strip() or "ru_RU-irina-medium"
+    voice_dir = Path(os.getenv("PIPER_VOICE_DIR", "/tmp/ghostsee-piper-voices"))
+    voice_dir.mkdir(parents=True, exist_ok=True)
+    model_path = voice_dir / f"{voice}.onnx"
 
-    await c.edit("🎙 Генерирую голосовое сообщение…")
+    await c.edit("💬 Думаю… генерирую голосовое сообщение")
+
     try:
-        import edge_tts
-        communicate = edge_tts.Communicate(text, voice=voice)
-        chunks = []
-        async for chunk in communicate.stream():
-            if chunk.get("type") == "audio" and chunk.get("data"):
-                chunks.append(chunk["data"])
-        audio_bytes = b"".join(chunks)
-    except Exception as e:
-        raise ValueError(f"Edge TTS не сработал: {str(e)[:220]}") from e
+        # Скачиваем модель один раз на инстанс Render; далее используем локальный файл.
+        if not model_path.is_file() or not model_path.with_name(model_path.name + ".json").is_file():
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "piper.download_voices", voice,
+                "--download-dir", str(voice_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, err = await asyncio.wait_for(proc.communicate(), timeout=240)
+            if proc.returncode != 0 or not model_path.is_file():
+                detail = err.decode("utf-8", "replace")[-350:] if err else "неизвестная ошибка"
+                raise ValueError(f"Не удалось загрузить голос Piper: {detail}")
 
-    if not audio_bytes:
-        raise ValueError("Edge TTS не вернул аудио. Попробуй ещё раз.")
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise ValueError("На сервере не найден FFmpeg. Проверь сборку Render.")
 
-    # Telegram voice notes требуют OGG/Opus.
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise ValueError("На сервере не найден FFmpeg. Проверь сборку Render.")
-    proc = await asyncio.create_subprocess_exec(
-        ffmpeg, "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-        "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", "-application", "voip",
-        "-f", "ogg", "pipe:1",
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE)
-    ogg, err = await proc.communicate(audio_bytes)
-    if proc.returncode != 0 or not ogg:
-        detail = err.decode("utf-8", "replace")[:250] if err else "неизвестная ошибка"
-        raise ValueError(f"Не удалось преобразовать аудио в голосовое: {detail}")
+        with tempfile.TemporaryDirectory(prefix="ghostsee_sound_") as tmp:
+            wav_path = str(Path(tmp) / "speech.wav")
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "piper",
+                "-m", str(model_path),
+                "-f", wav_path,
+                "--", text,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, err = await asyncio.wait_for(proc.communicate(), timeout=180)
+            if proc.returncode != 0 or not os.path.isfile(wav_path) or os.path.getsize(wav_path) == 0:
+                detail = err.decode("utf-8", "replace")[-350:] if err else "неизвестная ошибка"
+                raise ValueError(f"Piper не смог озвучить текст: {detail}")
 
-    upload = BufferedInputFile(ogg, filename="ghostsee_voice.ogg")
-    await c.bot.send_voice(
-        chat_id=c.chat_id,
-        voice=upload,
-        business_connection_id=c.bc,
-        reply_to_message_id=c.mid,
-    )
-    await c.edit("✅ Голосовое отправлено в этот чат.")
+            conv = await asyncio.create_subprocess_exec(
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                "-i", wav_path, "-c:a", "libopus", "-b:a", "48k",
+                "-vbr", "on", "-application", "voip", "-f", "ogg", "pipe:1",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            ogg, conv_err = await conv.communicate()
+            if conv.returncode != 0 or not ogg:
+                detail = conv_err.decode("utf-8", "replace")[-250:] if conv_err else "неизвестная ошибка"
+                raise ValueError(f"Не удалось подготовить Telegram voice: {detail}")
+
+        upload = BufferedInputFile(ogg, filename="ghostsee_voice.ogg")
+        await c.bot.send_voice(
+            chat_id=c.chat_id,
+            voice=upload,
+            business_connection_id=c.bc,
+            reply_to_message_id=c.mid,
+        )
+        await c.edit("✅ Голосовое отправлено в этот чат.")
+    except asyncio.TimeoutError as e:
+        raise ValueError("Генерация заняла слишком много времени. Попробуй текст покороче.") from e
 
 
 @command("tl")
