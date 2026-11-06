@@ -108,41 +108,50 @@ async def type_(c: Ctx):
 
 def _tail(c): return (" " + esc(c.src)) if c.src else ""
 
+# Пауза между сообщениями .spam/.haha (сек): сообщения чуть заметны глазу, но спам остаётся быстрым (3-4 в секунду).
+# Медленнее: (0.35, 0.5); ещё быстрее: (0.05, 0.1), но Telegram может притормаживать отправку.
+SPAM_DELAY = (0.12, 0.20)
+LOVE_STEP = 0.5  # пауза между кадрами анимации .love, сек
+
 
 @command("love")
 async def love(c: Ctx):
-    """Радужная квадратная открытка из сердечек без Premium Custom Emoji."""
-    # Ровно пять строк: две сверху, строка с признанием, две снизу.
-    # В каждом кадре палитра сдвигается, создавая радужное переливание.
-    palettes = [
-        ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷"],
-        ["🧡", "💛", "💚", "💙", "💜", "🩷", "❤️"],
-        ["💛", "💚", "💙", "💜", "🩷", "❤️", "🧡"],
-        ["💚", "💙", "💜", "🩷", "❤️", "🧡", "💛"],
-        ["💙", "💜", "🩷", "❤️", "🧡", "💛", "💚"],
-        ["💜", "🩷", "❤️", "🧡", "💛", "💚", "💙"],
-        ["🩷", "❤️", "🧡", "💛", "💚", "💙", "💜"],
-    ]
-    animation = []
-    for shift, colors in enumerate(palettes):
-        row1 = "".join(colors[(i + shift) % len(colors)] for i in range(9))
-        row2 = "".join(colors[(i + shift + 2) % len(colors)] for i in range(9))
-        row4 = "".join(colors[(i + shift + 4) % len(colors)] for i in range(9))
-        row5 = "".join(colors[(i + shift + 6) % len(colors)] for i in range(9))
-        center_left = colors[(shift + 1) % len(colors)]
-        center_right = colors[(shift + 5) % len(colors)]
-        center = f"{center_left}{center_left} <b>Я ТЕБЯ ЛЮБЛЮ</b> {center_right}{center_right}"
-        animation.append("\n".join((row1, row2, center, row4, row5)))
-    final_colors = ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷"]
-    final = "\n".join((
-        "".join(final_colors[i % 7] for i in range(9)),
-        "".join(final_colors[(i + 2) % 7] for i in range(9)),
-        "❤️❤️ <b>Я ТЕБЯ ЛЮБЛЮ</b> ❤️❤️",
-        "".join(final_colors[(i + 4) % 7] for i in range(9)),
-        "".join(final_colors[(i + 6) % 7] for i in range(9)),
-    ))
-    animation.append(final + ("\n\n" + _tail(c) if c.src else ""))
-    await frames(c, animation, delay=0.45, premium=False)
+    """Квадрат из сердец 9×7: сердечки медленно появляются, потом в середине тихо проявляется «Я ТЕБЯ ЛЮБЛЮ»."""
+    cols, rows, mid = 9, 7, 3
+    pal = ["❤️", "🧡", "💛", "💚", "💙", "💜", "🩷"]
+    word = "Я ТЕБЯ ЛЮБЛЮ"
+
+    def cell(r: int, k: int) -> str:
+        return pal[(r + k) % len(pal)]
+
+    def hearts(n: int) -> str:          # первые n сердечек слева направо, сверху вниз
+        lines = []
+        for r in range(rows):
+            ks = [k for k in range(cols) if r * cols + k < n]
+            if ks:
+                lines.append("".join(cell(r, k) for k in ks))
+        return "\n".join(lines)
+
+    def with_text(m: int) -> str:       # в середине m букв надписи вместо сердечек
+        lines = []
+        for r in range(rows):
+            if r != mid:
+                lines.append("".join(cell(r, k) for k in range(cols)))
+            elif m >= len(word):
+                lines.append(f"{cell(r, 0)} <b>{word}</b> {cell(r, cols - 1)}")
+            else:
+                left = max(0, 7 - round(0.57 * m))   # сколько сердечек ещё остаётся в середине
+                mids = "".join(cell(r, 1 + j) for j in range(left))
+                lines.append(f"{cell(r, 0)} <i>{word[:m]}</i> {mids}{' ' if mids else ''}{cell(r, cols - 1)}")
+        return "\n".join(lines)
+
+    total = rows * cols
+    anim = [hearts(n) for n in range(4, total, 4)] + [hearts(total)]
+    anim += [with_text(m) for m in (1, 3, 5, 7, 9, 11)]
+    anim.append(with_text(len(word)) + (("\n\n" + esc(c.src)) if c.src else ""))
+    await frames(c, anim, delay=LOVE_STEP, premium=False)
+
+
 @command("fire")
 async def fire(c): await frames(c, ["🔥", "🔥🔥", "🔥🔥🔥", "🔥🔥🔥🔥", "🔥" + _tail(c)])
 @command("snow")
@@ -273,13 +282,38 @@ async def ai(c: Ctx):
         raise ValueError("AI_API_KEY не задан")
     if not c.src:
         raise ValueError("пустой вопрос")
+    key, model = cfg.ai_key, cfg.ai_model
+    base = cfg.ai_base.rstrip("/")
+    if not base and key.startswith("sk-or-"):  # ключ OpenRouter: адрес и бесплатная модель подставятся сами
+        base = "https://openrouter.ai/api/v1"
+        if model.startswith("claude"):
+            model = "recursive/flint-v1.0:free"
     async with httpx.AsyncClient(timeout=60) as h:
-        r = await h.post("https://api.anthropic.com/v1/messages",
-                         headers={"x-api-key": cfg.ai_key, "anthropic-version": "2023-06-01"},
-                         json={"model": cfg.ai_model, "max_tokens": 700, "messages": [{"role": "user", "content": c.src}]})
-    j = r.json()
-    out = "".join(x.get("text", "") for x in j.get("content", [])) or j.get("error", {}).get("message", "пусто")
-    await c.edit(f"❓ {esc(c.src)}\n\n🤖 {esc(out)}")
+        if base:  # OpenAI-совместимый API (OpenRouter и др.)
+            r = await h.post(f"{base}/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                             json={"model": model, "max_tokens": 700,
+                                   "messages": [{"role": "system", "content": "Отвечай кратко и по делу, на языке вопроса."},
+                                                {"role": "user", "content": c.src}]})
+        else:  # Anthropic, как раньше
+            r = await h.post("https://api.anthropic.com/v1/messages",
+                             headers={"x-api-key": cfg.ai_key, "anthropic-version": "2023-06-01"},
+                             json={"model": cfg.ai_model, "max_tokens": 700, "messages": [{"role": "user", "content": c.src}]})
+    try:
+        j = r.json()
+    except Exception:
+        raise ValueError(f"ИИ-сервис вернул не JSON (HTTP {r.status_code})")
+    if base:
+        msg = ((j.get("choices") or [{}])[0].get("message") or {})
+        out = msg.get("content") or ""
+    else:
+        out = "".join(x.get("text", "") for x in j.get("content", []))
+    if not out:
+        err = j.get("error")
+        err = err.get("message") if isinstance(err, dict) else err
+        if r.status_code == 429:
+            err = "лимит бесплатной модели, попробуй чуть позже"
+        out = err or f"пустой ответ (HTTP {r.status_code})"
+    await c.edit(f"❓ {esc(c.src)}\n\n🤖 {esc(out)[:3300]}")
 
 
 @command("tl")
@@ -517,7 +551,7 @@ async def spam(c: Ctx):
     text = esc(m[2])
     for _ in range(min(MAX_REPEAT, int(m[1]))):  # по одному сообщению, как раньше
         await c.say(text)
-        await asyncio.sleep(random.uniform(0.005, 0.010))
+        await asyncio.sleep(random.uniform(*SPAM_DELAY))
 
 
 MAX_SPAMG_WORDS = 100
@@ -540,7 +574,7 @@ async def haha(c: Ctx):
     await c.delete()
     for _ in range(min(MAX_REPEAT, int(c.args) if c.args.isdigit() else 5)):  # по одному сообщению
         await c.say(laugh())
-        await asyncio.sleep(random.uniform(0.005, 0.010))
+        await asyncio.sleep(random.uniform(*SPAM_DELAY))
 
 
 @command("burn")
@@ -912,7 +946,7 @@ async def cum(c: Ctx):
         "8====✊=D💦😫",
         "8=====D💦💦😩",
         "8=====D💦💦💦🥵",
-        "8=====D💦💦💦💦💀",
+        "8=====D💦💦💦💦🥵",
     ], 0.45)
     if c.src:
         await asyncio.sleep(0.5)
