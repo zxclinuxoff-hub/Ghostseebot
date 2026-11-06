@@ -518,9 +518,11 @@ async def sound(c: Ctx):
     base = (cfg.ai_base or "https://openrouter.ai/api/v1").rstrip("/")
     model = os.getenv("AI_TTS_MODEL", "heygen/heygen-voice-1-turbo:free").strip()
     voice = os.getenv("AI_TTS_VOICE", "nadine").strip()
-    fmt = os.getenv("AI_TTS_FORMAT", "mp3").strip().lower()
-    # MP3 is the reliable input for FFmpeg across hosted environments.
-    if fmt != "mp3":
+    fmt = os.getenv("AI_TTS_FORMAT", "pcm").strip().lower()
+    # HeyGen Voice is PCM-only; asking it for MP3 returns HTTP 400.
+    if "heygen" in model.lower():
+        fmt = "pcm"
+    elif fmt not in ("mp3", "pcm"):
         fmt = "mp3"
 
     await c.edit("🎙 Генерирую голосовое сообщение…")
@@ -546,8 +548,16 @@ async def sound(c: Ctx):
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise ValueError("На сервере не найден FFmpeg. Проверь сборку Render и повтори команду.")
+    # OpenRouter PCM is raw 16-bit little-endian audio. Read its stream
+    # parameters from Content-Type (documented default: 24 kHz, mono).
+    rate_match = re.search(r"rate=(\d+)", content_type)
+    channels_match = re.search(r"channels=(\d+)", content_type)
+    pcm_rate = int(rate_match.group(1)) if rate_match else 24000
+    pcm_channels = int(channels_match.group(1)) if channels_match else 1
+    ffmpeg_input = (["-f", "s16le", "-ar", str(pcm_rate), "-ac", str(pcm_channels)]
+                    if fmt == "pcm" else [])
     proc = await asyncio.create_subprocess_exec(
-        ffmpeg, "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+        ffmpeg, "-hide_banner", "-loglevel", "error", *ffmpeg_input, "-i", "pipe:0",
         "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", "-application", "voip",
         "-f", "ogg", "pipe:1",
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
