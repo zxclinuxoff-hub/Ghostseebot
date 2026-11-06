@@ -3,3 +3,4 @@ httpx>=0.27
 aiohttp>=3.9
 tzdata
 Pillow>=10.0,<13
+edge-tts>=7.2.0
