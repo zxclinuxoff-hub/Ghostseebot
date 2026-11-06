@@ -23,7 +23,7 @@ def main_menu(uid: int | None = None) -> M:
     return M(inline_keyboard=[
         *admin_rows,
         [B(text="⭐ Подключить", callback_data="connect"), B(text="💳 Подписка", callback_data="buy")],
-        [B(text="🎡 Колесо фортуны", web_app=WebAppInfo(url=f"{cfg.webhook_base}/app")), B(text="🎰 Рулетка", callback_data="roulette")] if cfg.webhook_base else [B(text="🎰 Рулетка", callback_data="roulette")],
+        [B(text="🎰 Казино", web_app=WebAppInfo(url=f"{cfg.webhook_base}/app")), B(text="🍀 Рулетка дня", callback_data="roulette")] if cfg.webhook_base else [B(text="🍀 Рулетка дня", callback_data="roulette")],
         [B(text="🧩 Функции", callback_data="cmds"), B(text="⚙️ Настройки", callback_data="settings")],
         [B(text="⚙️ Команды", callback_data="cmdcfg"), B(text="🎁 Заработать", callback_data="refs")],
         [B(text="👤 Кабинет", callback_data="cabinet"), B(text="⭐ Поддержать", callback_data="donate")],

@@ -31,6 +31,7 @@ class Config:
     trial_days: int = 7
     ai_key: str = _env("AI_API_KEY", "")
     ai_model: str = _env("AI_MODEL", "claude-haiku-5-5")
+    ai_base: str = _env("AI_BASE_URL", "")  # пусто = Anthropic; иначе OpenAI-совместимый API (например https://openrouter.ai/api/v1)
 
     @property
     def channel_url(self) -> str:
@@ -45,9 +46,9 @@ cfg = Config()
 
 # Единая подписка «Всё включено»
 PLANS = {
-    "m1": {"title": "1 месяц", "days": 30, "stars": 40},
-    "m3": {"title": "3 месяца", "days": 90, "stars": 100},   # выгода 20⭐
-    "y1": {"title": "1 год", "days": 365, "stars": 360},     # выгода 120⭐
+    "m1": {"title": "1 месяц", "days": 30, "stars": 50},
+    "m3": {"title": "3 месяца", "days": 90, "stars": 100},   # выгода 50⭐
+    "y1": {"title": "1 год", "days": 365, "stars": 360},     # выгода 240⭐
 }
 # Добавь в конец файла Bot/config.py
 LOG_CHAT_ID = -1004377590810
