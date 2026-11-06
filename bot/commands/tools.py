@@ -505,79 +505,58 @@ async def ai(c: Ctx):
 
 @command("sound")
 async def sound(c: Ctx):
-    """Озвучивает текст через бесплатную TTS-модель OpenRouter."""
+    """Озвучивает текст через Edge TTS без ключа OpenRouter."""
     import os
-    if not cfg.ai_key:
-        raise ValueError("AI_API_KEY не задан")
     text = (c.src or "").strip()
     if not text:
         raise ValueError("Напиши текст: .sound Привет, GhostSee!")
     if len(text) > 4500:
         raise ValueError("Слишком длинный текст. Максимум 4500 символов.")
 
-    base = (cfg.ai_base or "https://openrouter.ai/api/v1").rstrip("/")
-    model = os.getenv("AI_TTS_MODEL", "heygen/heygen-voice-1-turbo:free").strip()
-    voice = os.getenv("AI_TTS_VOICE", "nadine").strip()
-    fmt = os.getenv("AI_TTS_FORMAT", "pcm").strip().lower()
-    # HeyGen Voice is PCM-only; asking it for MP3 returns HTTP 400.
-    if "heygen" in model.lower():
-        fmt = "pcm"
-    elif fmt not in ("mp3", "pcm"):
-        fmt = "mp3"
+    # Edge TTS не расходует бесплатную квоту OpenRouter/HeyGen.
+    # Старое значение nadine от HeyGen заменяем на русскую нейронную озвучку.
+    voice = os.getenv("AI_TTS_VOICE", "ru-RU-SvetlanaNeural").strip()
+    if not voice or voice.lower() == "nadine":
+        voice = "ru-RU-SvetlanaNeural"
 
     await c.edit("🎙 Генерирую голосовое сообщение…")
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0)) as h:
-        r = await h.post(
-            base + "/audio/speech",
-            headers={"Authorization": f"Bearer {cfg.ai_key}", "Content-Type": "application/json",
-                     "HTTP-Referer": "https://t.me/ghostseebot", "X-Title": "GhostSee"},
-            json={"model": model, "input": text, "voice": voice, "response_format": fmt},
-        )
-    content_type = r.headers.get("content-type", "").lower()
-    if r.status_code >= 400 or not r.content or "audio/" not in content_type:
-        detail = ""
-        try:
-            payload = r.json()
-            detail = (payload.get("error") or {}).get("message", "") if isinstance(payload.get("error"), dict) else str(payload.get("error", ""))
-        except Exception:
-            detail = r.text[:180]
-        raise ValueError(f"TTS не сработал (HTTP {r.status_code}): {detail or 'модель не вернула аудио'}")
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(text, voice=voice)
+        chunks = []
+        async for chunk in communicate.stream():
+            if chunk.get("type") == "audio" and chunk.get("data"):
+                chunks.append(chunk["data"])
+        audio_bytes = b"".join(chunks)
+    except Exception as e:
+        raise ValueError(f"Edge TTS не сработал: {str(e)[:220]}") from e
 
-    audio_bytes = r.content
-    # Telegram voice notes require OGG/Opus. Never silently downgrade to an MP3 audio file.
+    if not audio_bytes:
+        raise ValueError("Edge TTS не вернул аудио. Попробуй ещё раз.")
+
+    # Telegram voice notes требуют OGG/Opus.
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        raise ValueError("На сервере не найден FFmpeg. Проверь сборку Render и повтори команду.")
-    # OpenRouter PCM is raw 16-bit little-endian audio. Read its stream
-    # parameters from Content-Type (documented default: 24 kHz, mono).
-    rate_match = re.search(r"rate=(\d+)", content_type)
-    channels_match = re.search(r"channels=(\d+)", content_type)
-    pcm_rate = int(rate_match.group(1)) if rate_match else 24000
-    pcm_channels = int(channels_match.group(1)) if channels_match else 1
-    ffmpeg_input = (["-f", "s16le", "-ar", str(pcm_rate), "-ac", str(pcm_channels)]
-                    if fmt == "pcm" else [])
+        raise ValueError("На сервере не найден FFmpeg. Проверь сборку Render.")
     proc = await asyncio.create_subprocess_exec(
-        ffmpeg, "-hide_banner", "-loglevel", "error", *ffmpeg_input, "-i", "pipe:0",
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
         "-c:a", "libopus", "-b:a", "48k", "-vbr", "on", "-application", "voip",
         "-f", "ogg", "pipe:1",
-        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE)
     ogg, err = await proc.communicate(audio_bytes)
     if proc.returncode != 0 or not ogg:
         detail = err.decode("utf-8", "replace")[:250] if err else "неизвестная ошибка"
-        raise ValueError(f"Не удалось преобразовать аудио в голосовое сообщение: {detail}")
-    audio_bytes, filename = ogg, "ghostsee_voice.ogg"
+        raise ValueError(f"Не удалось преобразовать аудио в голосовое: {detail}")
 
-    # Send the voice note back into the same chat where .sound was invoked.
-    # For Telegram Business messages, preserve the business connection context.
-    upload = BufferedInputFile(audio_bytes, filename=filename)
+    upload = BufferedInputFile(ogg, filename="ghostsee_voice.ogg")
     await c.bot.send_voice(
         chat_id=c.chat_id,
         voice=upload,
         business_connection_id=c.bc,
         reply_to_message_id=c.mid,
-        caption="🎙 GhostSee Voice",
     )
-    await c.edit("✅ Озвучка отправлена в этот чат.")
+    await c.edit("✅ Голосовое отправлено в этот чат.")
 
 
 @command("tl")
