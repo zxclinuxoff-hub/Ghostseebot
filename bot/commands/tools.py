@@ -567,12 +567,17 @@ async def sound(c: Ctx):
         raise ValueError(f"Не удалось преобразовать аудио в голосовое сообщение: {detail}")
     audio_bytes, filename = ogg, "ghostsee_voice.ogg"
 
-    target_chat = c.conn.get("user_chat_id")
-    if not target_chat:
-        raise ValueError("Не найден личный чат для отправки аудио. Открой личку с ботом и повтори команду.")
+    # Send the voice note back into the same chat where .sound was invoked.
+    # For Telegram Business messages, preserve the business connection context.
     upload = BufferedInputFile(audio_bytes, filename=filename)
-    await c.bot.send_voice(target_chat, upload, caption="🎙 GhostSee Voice")
-    await c.edit("✅ Озвучка готова. Отправил в личные сообщения.")
+    await c.bot.send_voice(
+        chat_id=c.chat_id,
+        voice=upload,
+        business_connection_id=c.bc,
+        reply_to_message_id=c.mid,
+        caption="🎙 GhostSee Voice",
+    )
+    await c.edit("✅ Озвучка отправлена в этот чат.")
 
 
 @command("tl")
